@@ -86,7 +86,7 @@ Apply these guardrails to every implementation:
 - Use Authorization Code flow with PKCE using `S256`. Do not use implicit flow.
 - Use the assignment's Auth0 discovery endpoint, client ID, callback URL, logout URL, scopes (`openid profile email`), and available API audience.
 - Before selecting the design, inspect the tenant discovery document and JWKS to verify supported flows, token characteristics, and signing algorithms. Do not assume them.
-- `TODO`: Decide which token the API accepts as its bearer credential. Document the choice, one-line rationale, and security trade-offs in `README.md` (and the fuller decision in `DECISIONS.md`) before implementing token validation.
+- Accept only an Auth0 access token requested for audience `https://bbl-candidate-test-api` as the API Bearer credential. Do not accept an ID token as API authorization. The rationale and trade-offs are recorded in `README.md` and `DECISIONS.md`.
 - `TODO`: Decide how a validated OIDC identity maps to the application's person/`ownerId` record.
 - `TODO`: Define the precise token validation rules after inspecting discovery metadata and JWKS.
 
@@ -94,7 +94,7 @@ Apply these guardrails to every implementation:
 
 - `TODO`: Decide what happens to bookmarks when their collection is deleted, then document the API contract, trade-offs, implementation, and tests.
 - `TODO`: Resolve the statement that a user may want to share a collection. Decide what, if anything, will be implemented; document the choice and its relationship to the privacy invariant. Do not silently add sharing behavior.
-- `TODO`: Define filtering parameters and semantics for both resources.
+- `TODO`: Define remaining filtering parameters and semantics. Bookmark filtering by `collectionId` is selected, but uncategorized-bookmark semantics remain unresolved.
 - `TODO`: Define status codes, validation rules, error shape, pagination behavior if any, and exact `PUT` versus `PATCH` semantics in `API_DESIGN.md`.
 - `TODO`: Finalize the resource schema and justify any changes to the suggested fields.
 - `TODO`: Decide whether any optional bonus will be attempted after the core work is complete.
@@ -106,7 +106,7 @@ Automated tests are required as runnable evidence for the claims made about the 
 At minimum, the verification plan must cover:
 
 - Authentication is required on every backend API route.
-- The selected bearer credential is accepted only when it satisfies the documented validation rules; missing, malformed, invalid, or otherwise unacceptable credentials are rejected.
+- The API access token is accepted only when it satisfies the documented validation rules; missing, malformed, invalid, or otherwise unacceptable credentials and ID tokens are rejected.
 - User A cannot read, list, filter, update, patch, delete, relate, or infer the existence of user B's collections or bookmarks.
 - A bookmark cannot be attached to another user's collection.
 - CRUD, filtering, `/me`, and `GET /collections/:id/bookmarks` follow the documented API contract and persist through Prisma/SQL.
