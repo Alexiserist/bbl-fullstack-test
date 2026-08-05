@@ -4,6 +4,30 @@ TODO: Add setup, run, test, and completed-versus-skipped documentation as the pr
 
 Current status: repository structure only; no application code has been implemented.
 
+## Local PostgreSQL
+
+The local database uses PostgreSQL 18.4 through Docker Compose. Copy `.env.example` to `.env` if `.env` is not already present, then review the local-only credentials.
+
+Start the database:
+
+```bash
+docker compose up -d postgres
+```
+
+Check its health:
+
+```bash
+docker compose ps
+```
+
+Stop the database:
+
+```bash
+docker compose down
+```
+
+Prisma will use `DATABASE_URL` from `.env` after the backend is implemented.
+
 ## Authentication decision
 
 The backend accepts only an Auth0 access token issued for the API audience as its Bearer credential, because access tokens are audience-bound credentials intended for APIs while ID tokens are intended for the client application and must not authorize API access.

@@ -1,7 +1,7 @@
 # 01 Planning - Raw Conversation
 
-- Date: 2026-08-04
-- Scope: Project discovery, repository instructions, authentication research, and initial API design.
+- Date: 2026-08-04 through 2026-08-06
+- Scope: Project discovery, repository instructions, authentication research, database selection, and detailed API design.
 - Recording note: This transcript contains the visible user/assistant conversation. Hidden system instructions, private reasoning, and low-level tool transport are not included. Credentials and sensitive payloads are omitted or described without their values.
 
 ---
@@ -469,3 +469,639 @@ I’ll create `transcripts/01-planning.md` from the visible user/assistant conve
 ### Assistant
 
 Created [transcripts/01-planning.md](D:/Git/bbl-fullstack-test/transcripts/01-planning.md) with the visible planning conversation through this request. It includes the Auth0 discovery, unsuccessful interactive-browser attempt, safe OAuth probes, architecture decisions, and API-design correction. Credentials, hidden instructions, private reasoning, and low-level tool payloads are excluded. No application code was changed.
+
+---
+
+## Continuation recording note
+
+This continuation captures the visible planning conversation and decisions after the first transcript update. Some early assistant messages in this continuation were compacted before the transcript was updated; those entries are explicitly labeled **Assistant (retained decision summary)** and preserve the resulting decision without claiming verbatim wording. Later entries preserve the visible response text directly. No credentials, raw tokens, hidden instructions, private reasoning, or low-level tool payloads are included.
+
+---
+
+## Turn 10 - Identify decisions required before API implementation
+
+### User
+
+what decide effect to implement api first list me and i will design it
+
+### Assistant (retained decision summary)
+
+Listed the API design decisions that should be resolved before implementation:
+
+1. Database
+2. Local user lifecycle
+3. `/me` response
+4. Token validation
+5. Resource validation
+6. Collection deletion
+7. Sharing
+8. PUT/PATCH
+9. Privacy errors
+10. Status codes/error shape
+11. Filters
+12. Lists/pagination
+13. Nested endpoint
+14. Tests/seeds
+
+---
+
+## Turn 11 - Confirm the design checklist
+
+### User
+
+1. Database:
+
+  2. Local user lifecycle:
+  3. /me response:
+  4. Token validation:
+  5. Resource validation:
+  6. Collection deletion:
+  7. Sharing:
+  8. PUT/PATCH:
+  9. Privacy errors:
+  10. Status codes/error shape:
+  11. Filters:
+  12. Lists/pagination:
+  13. Nested endpoint:
+  14. Tests/seeds:
+
+### User
+
+1. Database:
+
+    2. Local user lifecycle:
+    3. /me response:
+    4. Token validation:
+    5. Resource validation:
+    6. Collection deletion:
+    7. Sharing:
+    8. PUT/PATCH:
+    9. Privacy errors:
+    10. Status codes/error shape:
+    11. Filters:
+    12. Lists/pagination:
+    13. Nested endpoint:
+    14. Tests/seeds:
+
+### Assistant (retained decision summary)
+
+Confirmed the checklist and began walking through it one topic at a time, starting with the database.
+
+---
+
+## Turn 12 - Compare databases for Prisma
+
+### User
+
+let walk through each topic 
+on database give me advice about best database good for prisma typeorm
+
+### Assistant (retained decision summary)
+
+Compared PostgreSQL, MySQL, and SQLite for the assignment. Recommended PostgreSQL with Prisma because the project requires SQL persistence, relational ownership constraints, nullable bookmark-to-collection relations, filtering, and strong test isolation. Clarified that TypeORM should not be added because the assignment explicitly requires Prisma.
+
+### User
+
+ok compare with another database
+- i want to use ID type uuid
+- use docker compose local
+
+### Assistant (retained decision summary)
+
+Compared PostgreSQL, MySQL, and SQLite for UUID storage and Docker Compose development. Recommended PostgreSQL because it has a native UUID type, strong foreign-key behavior, mature Prisma support, and a straightforward official Docker image. Noted that SQLite is simpler but weaker for matching the intended local Docker and relational setup.
+
+### User
+
+ok i decide use postgress
+
+### Assistant (retained decision summary)
+
+Recorded PostgreSQL as the accepted database and Prisma as the only ORM. The decision was added to the project documentation without application code.
+
+---
+
+## Turn 13 - Add local PostgreSQL infrastructure
+
+### User
+
+generate me docker compose for postgress stable version and generate me .env for docker compose
+
+### Assistant (retained decision summary)
+
+Created a local Docker Compose configuration using the official stable PostgreSQL 18.4 image, a persistent volume, localhost-only port binding, and a health check. Added an ignored local `.env`, a safe `.env.example`, and README commands. Validated the Compose configuration. No application service or schema code was added.
+
+### User
+
+UUIDs are generated by Prisma
+
+### Assistant (retained decision summary)
+
+Recorded that application entity UUIDs are generated by Prisma and stored in PostgreSQL native UUID columns. Database inserts performed outside Prisma would need to provide their own UUIDs.
+
+---
+
+## Turn 14 - Explain just-in-time user provisioning
+
+### User
+
+give me next topic
+
+### Assistant (retained decision summary)
+
+Introduced Topic 2: the local user lifecycle and how an authenticated Auth0 identity maps to a local owner record.
+
+### User
+
+what is just-in-time provisioning
+
+### Assistant (retained decision summary)
+
+Explained that just-in-time provisioning creates the local user only after the first valid Auth0 access token is received. The backend validates the token, reads its issuer and subject, finds or creates the local user, and uses that local UUID as `ownerId`. It does not seed or store Auth0 passwords.
+
+### User
+
+what is authSubject give a detail
+
+### Assistant (retained decision summary)
+
+Explained that `authSubject` stores the verified token's opaque `sub` value. It identifies the external Auth0 account only when combined with `authIssuer`. It is not an email, username, local owner ID, or value that the client may select, and it must not be parsed for authorization meaning.
+
+### User
+
+ok decide like this
+  2. Local user lifecycle:
+  Use just-in-time provisioning on every authenticated route. Identify the
+  Auth0 account using the unique combination of issuer and subject. Create
+  a local user with a Prisma-generated UUID when no record exists, and use
+  that UUID as ownerId. Seeded users are test fixtures and are separate
+  from the real Auth0 account. Email and name are optional and never used
+  as ownership identifiers.
+
+### Assistant (retained decision summary)
+
+Recorded the accepted local-user lifecycle in `AGENTS.md`, `API_DESIGN.md`, and ADR-004. Added a uniqueness requirement on `(authIssuer, authSubject)` and atomic provisioning behavior for concurrent first requests. No application code was added.
+
+---
+
+## Turn 15 - Define `/me` and profile enrichment
+
+### User
+
+next topic
+
+### Assistant (retained decision summary)
+
+Introduced Topic 3: the `/me` response and which profile fields can be obtained from Auth0.
+
+### User
+
+i look up on openid-configuration
+"claims_supported": [
+"aud",
+"auth_time",
+"created_at",
+"email",
+"email_verified",
+"exp",
+"family_name",
+"given_name",
+"iat",
+"identities",
+"iss",
+"name",
+"nickname",
+"phone_number",
+"picture",
+"sub"
+],
+
+
+is this a valid field ? if that true maybe we should verify exp ? and i think email and name should be valid if not in frontend will be wired no username or email telling exactly account
+
+### Assistant (retained decision summary)
+
+Explained that `claims_supported` means the provider can supply those claims in appropriate OIDC responses, not that every access token contains all of them. Confirmed that `exp` must be required and validated for API access tokens. Recommended nullable local email and name fields, with a frontend display fallback, while keeping ownership based only on verified issuer and subject.
+
+### User
+
+ok decide like this
+GET /me returns id, nullable email, nullable name, createdAt, and
+  updatedAt. During initial provisioning, the backend obtains available
+  email and name from Auth0 /userinfo using the validated access token.
+  The frontend displays name, falling back to email and then a generic
+  signed-in label. Email and name never determine ownership.
+
+  The API requires and validates exp on every access token. Expired tokens
+  and tokens missing required validation claims are rejected with 401.
+
+### Assistant (retained decision summary)
+
+Recorded the accepted `/me` response, display fallback, `/userinfo` enrichment plan, and required access-token expiry validation.
+
+### User
+
+Still TODO: behavior when the /userinfo request times out or fails, and the remaining access-token validation rules. what is this about
+
+### Assistant (retained decision summary)
+
+Explained that `/userinfo` is a separate network request that can time out, return an error, or omit claims even when the access token itself is valid. The API therefore needed a decision about whether profile enrichment failure should reject the authenticated request or continue with null profile fields.
+
+### User
+
+wait what about /me
+
+### Assistant (retained decision summary)
+
+Clarified that `/me` returns the local user record and that just-in-time provisioning runs before it. Profile enrichment is part of initial provisioning, not the source of ownership identity.
+
+### User
+
+still not understand why when login with oauth not receive data userdata
+
+### Assistant (retained decision summary)
+
+Clarified the separation between the frontend's OIDC identity information, the access token intended for the API, and the `/userinfo` endpoint. An API access token is an authorization credential and is not guaranteed to contain email or name. The frontend may receive ID-token profile information for display, while the backend uses the access token and optionally `/userinfo` for local enrichment.
+
+### User
+
+ok decided to 
+  1. Validate access token successfully
+  2. Resolve or create local user
+  3. Attempt /userinfo with a short timeout
+  4. If successful, store available email and name
+  5. If it fails, store email/name as null
+  6. Continue the authenticated request
+
+### Assistant (retained decision summary)
+
+Recorded one `/userinfo` attempt only for a newly provisioned user. Failure or missing claims leaves nullable values empty and does not fail the authenticated request. Existing users do not trigger repeated `/userinfo` requests. The exact timeout duration remains `TODO`.
+
+---
+
+## Turn 16 - Define access-token validation
+
+### User
+
+next topic
+
+### Assistant (retained decision summary)
+
+Introduced Topic 4: the precise access-token validation policy.
+
+### User
+
+what is JWKS ,nbf, azp
+
+### Assistant (retained decision summary)
+
+Explained that JWKS publishes public keys used to verify JWT signatures, `nbf` prevents a token from being accepted before its valid time, and `azp` identifies the authorized client when present. Also distinguished the possible Auth0 `client_id` claim and noted that a real token must confirm which client claim this tenant uses.
+
+### User
+
+ok validate like this
+  Accept Bearer access tokens only. Validate the RS256 signature through
+  the tenant JWKS, exact issuer, API audience, exp, iat, optional nbf,
+  non-empty sub, and the frontend client identifier. Apply 60 seconds of
+  clock tolerance. Cache JWKS keys and refresh once for an unknown kid.
+  Do not require custom API scopes because none are defined. Reject every
+  validation failure and all ID tokens with a generic 401 response and
+  never log raw tokens.
+
+  The real access token must be inspected before implementation to confirm
+  RS256 and whether the client claim is azp or client_id.
+
+### Assistant (retained decision summary)
+
+Recorded the strict access-token policy in `AGENTS.md`, `API_DESIGN.md`, and ADR-006. Authentication implementation remains gated on inspecting a real audience-bound token to confirm its algorithm and client-claim name.
+
+---
+
+## Turn 17 - Define resource validation
+
+### User
+
+next topic
+
+### User
+
+next topic
+
+### Assistant (retained decision summary)
+
+Presented Topic 5 resource validation: reject unknown and server-controlled fields; validate UUIDs; use trimmed collection names of 1–100 characters; require absolute HTTP/HTTPS bookmark URLs up to 2,048 characters; use titles of 1–300 characters; allow nullable notes up to 10,000 characters and nullable same-owner collection references; allow duplicate collection names and bookmark URLs.
+
+### User
+
+ok design following
+
+### Assistant (work update)
+
+I’ll record Topic 5 — resource validation — using the rules we just agreed on, while leaving later topics such as deletion, sharing, PUT/PATCH semantics, filters, and pagination as TODO. I’ll update only the design documentation; no application code.
+
+### Assistant
+
+Topic 5 is documented with no application code added. Validation now covers strict fields, UUIDs, length limits, HTTP/HTTPS URLs, nullable notes and collection, duplicate allowance, and same-owner collection references. PUT/PATCH presence rules and error responses remain TODO.
+
+Next is Topic 6: collection deletion. Recommended behavior is to preserve bookmarks and set `collectionId` to null because uncategorized bookmarks already exist in the assignment.
+
+---
+
+## Turn 18 - Decide collection deletion behavior
+
+### User
+
+collection delete if delete collection all bookmark under collection will set to null
+
+### Assistant (work update)
+
+I’ll record Topic 6 as: deleting an owned collection preserves its bookmarks and sets their `collectionId` to `null`. I’ll specify atomic persistence and isolation tests, while leaving privacy-error status behavior for Topic 9. No application code.
+
+### Assistant
+
+Topic 6 is documented. The collection is deleted, its bookmarks are preserved, their `collectionId` becomes null, the operation is atomic and owner-scoped, and cross-owner and preservation tests are required. No application code was added.
+
+Next topic: sharing. The recommendation is not to implement sharing because its authorization behavior is unspecified and conflicts with the strict owner-only privacy requirement.
+
+---
+
+## Turn 19 - Defer sharing
+
+### User
+
+sharing will done it later
+
+### Assistant (work update)
+
+I’ll record Topic 7 as deferred: the current submission has no sharing routes, fields, or exceptions to owner-only access. The future sharing model remains TODO and must be designed separately before implementation.
+
+### Assistant
+
+Topic 7 is documented as deferred. No sharing behavior or application code was added.
+
+Recommended Topic 8 behavior: PUT replaces all writable fields, while PATCH changes only supplied fields. Neither can override ownership.
+
+---
+
+## Turn 20 - Distinguish PUT from PATCH
+
+### User
+
+sound good but PATCH function isn't the same as put ?
+
+### Assistant
+
+They are similar, but the effect of omitted fields differs.
+
+Suppose a bookmark currently contains:
+
+```json
+{
+  "url": "https://old.example",
+  "title": "Old title",
+  "notes": "Important",
+  "collectionId": "collection-uuid"
+}
+```
+
+`PATCH` changes only supplied fields. Sending only a new title preserves the URL, notes, and collection.
+
+`PUT` replaces the complete writable representation. Sending only URL and title replaces those required values and makes omitted nullable `notes` and `collectionId` null.
+
+For collections, they currently appear identical because `name` is the only writable field. Both remain required because the assignment explicitly requires PUT and PATCH.
+
+### User
+
+ok so decide like this
+
+### Assistant (work update)
+
+I’ll lock in Topic 8 with full-replacement PUT and partial-update PATCH semantics. Status codes and response bodies remain for Topic 10; this update changes documentation only.
+
+### Assistant
+
+Topic 8 is documented: PUT performs complete replacement; PATCH changes only supplied fields; empty patches are rejected; only nullable bookmark fields accept null; ownership and server-controlled fields remain immutable. No application code was added.
+
+---
+
+## Turn 21 - Choose privacy-preserving errors
+
+### User
+
+return the same 404 Not Found do not let another user discovering another user’s data
+
+### Assistant (work update)
+
+I’ll record Topic 9 as a uniform privacy rule across direct, nested, mutation, deletion, and collection-reference lookups: missing and other-owner resources produce the identical `404 Not Found` response. The exact shared error-body structure remains for Topic 10.
+
+### Assistant (work update)
+
+One patch context referenced the decision text in the wrong document, so no changes were applied. I’ve corrected the target and am applying the same documentation decision cleanly.
+
+### Assistant
+
+Topic 9 is documented. The uniform `404 Not Found` applies to direct routes, mutations, deletes, nested routes, filters, and bookmark collection references. Missing and other-owner cases must have identical status and response bodies. No application code was added.
+
+---
+
+## Turn 22 - Design success and error responses
+
+### User
+
+give me example resp
+
+### Assistant
+
+Proposed examples using `200 OK` for reads and updates, `201 Created` for creation, and initially `204 No Content` for deletion. Proposed a consistent error shape:
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "Request validation failed",
+  "details": [
+    {
+      "field": "url",
+      "message": "Must be an absolute HTTP or HTTPS URL"
+    }
+  ]
+}
+```
+
+Also showed generic 401 and identical 404 examples. List-response shape remained pending the pagination decision.
+
+### User
+
+i think status success should wrap with property ?
+
+### Assistant
+
+Recommended wrapping successful resources and arrays in a `data` property. Advised against adding `success: true` because the HTTP status already communicates success. Explained that pagination metadata could later be added as a sibling `meta` property and that a 204 delete could not contain an envelope.
+
+### User
+
+i want statuscode and message too for consistency is it any trade off ?
+
+### Assistant
+
+Explained the trade-offs: body `statusCode` duplicates HTTP status and could drift, messages add payload and should never control frontend logic, and a consistent delete envelope requires `200 OK` rather than `204 No Content`.
+
+Recommended successful bodies such as:
+
+```json
+{
+  "statusCode": 200,
+  "message": "Bookmark retrieved",
+  "data": {}
+}
+```
+
+and successful deletion as `200 OK` with `data: null`. Required the implementation to derive the body status from the real HTTP status and keep privacy-sensitive 404 messages identical.
+
+### User
+
+ok decide like this
+
+### Assistant (work update)
+
+I’ll record Topic 10 with wrapped success responses, `200` deletion responses, a stable error envelope, and a rule that the body status must always match the real HTTP status. Pagination metadata remains TODO for Topic 12. No application code.
+
+### Assistant
+
+Topic 10 is documented. Success uses `{ statusCode, message, data }`; GET, PUT, PATCH, and DELETE use 200; POST uses 201; DELETE returns `data: null`. Errors use `{ statusCode, code, message, details }`. No application code was added.
+
+---
+
+## Turn 23 - Select list filters
+
+### User
+
+explain more
+
+### Assistant
+
+Explained the minimal owner-scoped filtering design:
+
+```http
+GET /collections?name=work
+GET /bookmarks?collectionId=<collection-id>
+GET /bookmarks?uncategorized=true
+GET /bookmarks
+```
+
+Collection name matching is trimmed, case-insensitive, and partial. Bookmark `collectionId` must reference an owned collection. `uncategorized=true` selects null `collectionId`. Combining `collectionId` and `uncategorized=true` is invalid. URL search, title search, full-text search, owner filtering, and multiple collection IDs are not added.
+
+### User
+
+sound good ok
+
+### Assistant (work update)
+
+I’ll lock in Topic 11 with owner-scoped collection-name filtering, bookmark collection filtering, and `uncategorized=true`. Search and full-text features remain outside scope, and ordering/pagination stay for Topic 12.
+
+### Assistant
+
+Topic 11 is documented. No application code was added.
+
+---
+
+## Turn 24 - Add bounded pagination
+
+### User
+
+should i use it for performance pagination ?
+
+### Assistant
+
+Yes. Pagination prevents list endpoints from loading an unbounded number of rows, reducing database work, memory use, response size, and frontend rendering time.
+
+Recommended offset pagination:
+
+```http
+GET /bookmarks?page=1&pageSize=20
+GET /collections?name=work&page=2&pageSize=20
+```
+
+Recommended `page` default 1, `pageSize` default 20 and maximum 100, deterministic `createdAt DESC, id DESC` ordering, and metadata containing `page`, `pageSize`, `total`, and `totalPages`. Explained the count-query and large-offset trade-offs and rejected cursor pagination as unnecessary complexity for this assignment.
+
+### User
+
+i think we should use pagination
+
+### Assistant (work update)
+
+I’ll record Topic 12 as bounded offset pagination on every list endpoint, using `page`, `pageSize`, deterministic ordering, and `meta`. I’ll also define empty and out-of-range behavior so the contract is implementable without another hidden choice. No application code.
+
+### Assistant
+
+Topic 12 is documented with offset pagination on all list routes, defaults of page 1 and page size 20, maximum page size 100, owner-scoped counts, deterministic ordering, metadata, and supporting composite indexes. A page beyond available results succeeds with an empty array and accurate metadata. No application code was added.
+
+---
+
+## Turn 25 - Define the nested collection-bookmark route
+
+### User
+
+describe more about nesting
+
+### Assistant
+
+Explained that nesting is a URL relationship, not embedded JSON storage. A bookmark remains an independent SQL row with a nullable `collectionId`.
+
+Defined this route:
+
+```http
+GET /collections/<collection-uuid>/bookmarks?page=1&pageSize=20
+```
+
+The backend validates the UUID, resolves the parent using collection ID plus authenticated owner ID, queries bookmarks using both collection ID and owner ID, and applies pagination. Missing and other-owner collections return identical 404 responses; an owned empty collection returns an empty successful page. The route is equivalent to the bookmark `collectionId` filter and does not add nested mutations.
+
+### User
+
+GET /collections/550e8400-e29b-41d4-a716-446655440000/bookmarks?page=1&pageSize=20 yes i think we should nest like this
+
+### Assistant (work update)
+
+I’ll record Topic 13 with the collection UUID in the path and `page`/`pageSize` as its only query parameters. The endpoint will remain read-only, owner-scoped, and equivalent to bookmark filtering by the same collection.
+
+### Assistant
+
+Topic 13 is documented. The parent collection and bookmark queries are owner-scoped, only pagination query parameters are accepted, missing and other-owner collections return identical 404 responses, and nested bookmark mutations are not added. No application code was added.
+
+---
+
+## Turn 26 - Explain tests and seed fixtures
+
+### User
+
+what is it about
+
+### Assistant
+
+Explained that Topic 14 defines how the project proves its behavior and creates safe sample data for the assignment's required two users.
+
+Recommended Prisma seed fixtures with at least two fake users, separate private collections and bookmarks, uncategorized bookmarks, and an empty collection. Prisma generates UUIDs; fixtures contain no credentials or real Auth0 identity. The real Auth0 account remains separate and is created through just-in-time provisioning.
+
+Recommended test layers:
+
+- Backend unit tests for validation, token claims, PUT/PATCH semantics, pagination, and response envelopes.
+- Backend API integration tests against PostgreSQL and Prisma, using controlled signed JWTs and a test JWKS endpoint so the real authentication guard is exercised.
+- Frontend tests for collection and bookmark pages, filters, pagination, and UI states.
+- A full end-to-end Auth0 Authorization Code with PKCE smoke test using credentials supplied only through environment variables.
+
+Recommended Jest, Nest testing utilities, and Supertest for the backend; Vitest, React Testing Library, and MSW for the frontend; and Playwright for browser end-to-end testing. Recommended coverage reports without an arbitrary global percentage, while requiring complete endpoint, authentication, and privacy matrices.
+
+---
+
+## Turn 27 - Update the planning transcript again
+
+### User
+
+update transcript
+
+### Assistant (work update)
+
+I’ll append the visible planning conversation since the last transcript entry, including the decisions and clarification exchanges. I’ll keep hidden instructions, internal reasoning, tool plumbing, credentials, and sensitive values out of the transcript.
+
+### Assistant
+
+Updated `transcripts/01-planning.md` through Topic 14. It now records the database, Auth0 identity, `/me`, token-validation, resource-validation, deletion, sharing, PUT/PATCH, privacy-error, response-envelope, filtering, pagination, nested-route, and test/seed discussions. Compacted assistant text is labeled as a retained decision summary rather than presented as verbatim. Credentials and hidden/tool-only content remain excluded. No application code was added.
