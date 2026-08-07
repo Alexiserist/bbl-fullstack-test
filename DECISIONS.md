@@ -620,3 +620,42 @@ is the source template; `frontend/.env` is never loaded by NestJS.
   configured local return URL after a 401.
 - A controlled backend repro confirms an empty `AUTH0_CLIENT_ID` produces
   `UnauthorizedException:401` before token verification.
+
+## ADR-022: Use shared bookmark dialogs and lazy collection previews
+
+- Status: Accepted
+- Date: 2026-08-07
+
+### Context
+
+The original frontend created bookmarks in a large inline form, exposed no
+bookmark edit flow, and required navigation to a collection detail page before
+its bookmarks were visible. The requested refresh needed a smaller MUI layout
+without adding filtering or resource behavior outside the assignment.
+
+### Decision
+
+Use one reusable bookmark dialog across list and detail views. Creation sends
+`POST /bookmarks`; editing submits the complete writable representation with
+`PUT /bookmarks/:id`. Collection rows use single-open MUI accordions and load
+five bookmarks only when expanded through the existing nested endpoint.
+Loaded nested pages are cached until a related create, edit, or delete
+invalidates them. The bookmark list continues to support only All,
+Uncategorized, or one owned collection, and collection selectors follow all
+paginated collection results in 100-item API pages.
+
+### Rationale and trade-offs
+
+The shared dialog keeps validation and null normalization consistent while the
+lazy accordion avoids requesting bookmark pages the user has not opened. Five
+items keeps the collection list compact; the dedicated detail route remains at
+20 items for deeper browsing. Cache invalidation adds frontend state handling,
+so tests explicitly cover moves between collections, deletion, nested
+pagination, and out-of-range pages.
+
+### Evidence
+
+- Frontend Vitest and React Testing Library suites cover the dialog and all
+  four resource pages: 25 tests across seven test files.
+- Frontend typechecking and the Vite production build pass. The build retains
+  the existing non-blocking warning for a JavaScript chunk larger than 500 kB.

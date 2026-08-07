@@ -92,6 +92,23 @@ npm.cmd install
 npm.cmd run dev
 ```
 
+The signed-in UI provides:
+
+- paginated collections with name filtering and lazy, collapsible bookmark
+  previews;
+- reusable MUI dialogs for creating and editing complete bookmark data;
+- bookmark filtering by all items, uncategorized items, or one owned
+  collection;
+- create, edit, and delete actions from list and detail views, with accessible
+  confirmations and consistent feedback; and
+- collection selectors that follow every API page instead of silently stopping
+  at the first 100 collections.
+
+The accordion preview intentionally shows five bookmarks per nested page. The
+dedicated collection detail route retains the API's normal 20-item page size.
+Bookmark title/URL search is not implemented because it is outside the core API
+contract.
+
 Frontend checks are:
 
 ```powershell
