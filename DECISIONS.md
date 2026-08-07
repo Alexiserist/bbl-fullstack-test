@@ -659,7 +659,53 @@ pages.
 ### Evidence
 
 - Frontend Vitest and React Testing Library suites cover the dialog and all
-  four resource pages, including page-size changes: 31 tests across seven test
+  four resource pages, including page-size changes: 36 tests across nine test
   files.
 - Frontend typechecking and the Vite production build pass. The build retains
   the existing non-blocking warning for a JavaScript chunk larger than 500 kB.
+
+## ADR-023: Persist the Auth0 SDK cache across page reloads
+
+- Status: Accepted
+- Date: 2026-08-08
+
+### Context
+
+The frontend configured the Auth0 React SDK with an in-memory cache. A full-page
+reload therefore discarded the cached access token and depended on silent Auth0
+session recovery to reconstruct the signed-in state. That recovery depends on
+browser cookie behavior. The candidate reported that the current browser flow
+appeared signed out after refreshing the application.
+
+The installed Auth0 SPA SDK provides `memory` and `localstorage` as built-in
+cache locations. Using `sessionStorage` would require a custom cache
+implementation, adding authentication code that the SDK would otherwise own.
+
+### Decision
+
+Configure `Auth0Provider` with the SDK-managed `localstorage` cache. Do not read,
+write, or interpret token values in application code. This preserves the SDK's
+cache-key, expiry, and token-selection behavior while allowing the authenticated
+state to survive a page reload.
+
+Do not enable refresh tokens as part of this change. Refresh-token rotation must
+first be confirmed as enabled for the supplied Auth0 SPA client and verified
+against a real audience-bound token.
+
+### Rationale and trade-offs
+
+Local storage provides reliable reload and cross-tab persistence without a
+custom cache. Unlike memory storage, it is readable by JavaScript on the same
+origin, so an XSS defect could expose cached bearer credentials. The frontend
+must therefore avoid unsafe HTML injection and keep its dependency and content
+security posture under review. This is an explicit usability-versus-exposure
+trade-off rather than a claim that local storage is intrinsically secure.
+
+### Evidence
+
+- `frontend/src/auth/config.spec.ts` locks the selected SDK cache location to
+  `localstorage`.
+- The provider consumes that exported setting directly; application code does
+  not manually store bearer tokens.
+- A live reload through the supplied Auth0 tenant remains an environment smoke
+  test and is not claimed by the deterministic Vitest configuration test.

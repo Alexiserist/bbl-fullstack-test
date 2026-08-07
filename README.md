@@ -126,7 +126,7 @@ migrations are deployed:
 Set-Location ..\backend
 npm.cmd run prisma:migrate:deploy
 $env:RUN_DB_TESTS='true'
-npm.cmd test -- --runInBand src/prisma/prisma.integration.spec.ts
+node --env-file=.env node_modules/jest/bin/jest.js --runInBand src/prisma/prisma.integration.spec.ts
 ```
 
 Without `RUN_DB_TESTS=true`, the database suite is skipped so the default
@@ -135,8 +135,12 @@ checks do not require a running Docker daemon.
 The browser uses `@auth0/auth0-react` with the API audience and
 `openid profile email` scope. The SDK handles the Authorization Code + PKCE
 browser flow; the API client sends only the audience-bound access token to the
-backend. Configure the Auth0 callback and logout URLs to match
-`frontend/.env.example` and the tenant application settings:
+backend. The SDK manages its cache in browser local storage so authentication
+survives a page reload; application code never reads or writes cached tokens
+directly. Refresh tokens remain disabled until rotation support is confirmed
+for the supplied Auth0 SPA client. This persistence choice and its XSS trade-off
+are recorded in `DECISIONS.md`. Configure the Auth0 callback and logout URLs to
+match `frontend/.env.example` and the tenant application settings:
 
 - Allowed Callback URL: `http://localhost:3000/callback`
 - Allowed Logout URL: `http://localhost:3000`

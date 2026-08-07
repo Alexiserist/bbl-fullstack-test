@@ -6,4 +6,8 @@ export const authConfig = {
   logoutUrl: import.meta.env.VITE_AUTH0_LOGOUT_URL ?? 'http://localhost:3000',
 };
 
+// Keep token persistence under the Auth0 SDK rather than handling bearer
+// credentials directly in application code.
+export const authCacheLocation = 'localstorage' as const;
+
 export const authIsConfigured = authConfig.clientId.trim().length > 0;

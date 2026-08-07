@@ -33,16 +33,27 @@ describeDatabase('PostgreSQL/Prisma persistence', () => {
   });
 
   it('persists owner-scoped rows and preserves a bookmark when its collection is deleted', async () => {
-    const [bookmarkA, bookmarkB] = await Promise.all([
+    const duplicateCollectionA = await prisma.collection.create({
+      data: { ownerId: userAId, name: 'A collection' },
+    });
+    const [bookmarkA, duplicateUrlBookmarkA, bookmarkB] = await Promise.all([
       prisma.bookmark.create({ data: { ownerId: userAId, collectionId: collectionAId, url: `https://a.${suffix}.test`, title: 'A bookmark' } }),
+      prisma.bookmark.create({ data: { ownerId: userAId, collectionId: duplicateCollectionA.id, url: `https://a.${suffix}.test`, title: 'Duplicate URL is allowed' } }),
       prisma.bookmark.create({ data: { ownerId: userBId, collectionId: collectionBId, url: `https://b.${suffix}.test`, title: 'B bookmark' } }),
     ]);
 
     await expect(prisma.collection.findFirst({ where: { id: collectionBId, ownerId: userAId } })).resolves.toBeNull();
-    await expect(prisma.bookmark.findMany({ where: { ownerId: userAId } })).resolves.toEqual([expect.objectContaining({ id: bookmarkA.id })]);
+    const userABookmarks = await prisma.bookmark.findMany({ where: { ownerId: userAId } });
+    expect(userABookmarks).toHaveLength(2);
+    expect(userABookmarks.map(({ id }) => id)).toEqual(expect.arrayContaining([
+      bookmarkA.id,
+      duplicateUrlBookmarkA.id,
+    ]));
+    expect(userABookmarks.map(({ id }) => id)).not.toContain(bookmarkB.id);
 
     await prisma.collection.delete({ where: { id: collectionAId } });
     await expect(prisma.bookmark.findUnique({ where: { id: bookmarkA.id }, select: { collectionId: true } })).resolves.toEqual({ collectionId: null });
+    await expect(prisma.bookmark.findUnique({ where: { id: duplicateUrlBookmarkA.id }, select: { collectionId: true } })).resolves.toEqual({ collectionId: duplicateCollectionA.id });
     await expect(prisma.bookmark.findUnique({ where: { id: bookmarkB.id }, select: { collectionId: true } })).resolves.toEqual({ collectionId: collectionBId });
   });
 });

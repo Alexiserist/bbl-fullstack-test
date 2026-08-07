@@ -4,7 +4,7 @@ import { Auth0Provider } from '@auth0/auth0-react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import App from './App';
-import { authConfig, authIsConfigured } from './auth/config';
+import { authCacheLocation, authConfig, authIsConfigured } from './auth/config';
 
 const theme = createTheme({
   palette: {
@@ -33,7 +33,7 @@ function Auth0ProviderWithNavigation({ children }: { children: ReactNode }) {
         redirect_uri: authConfig.callbackUrl,
         scope: 'openid profile email',
       }}
-      cacheLocation="memory"
+      cacheLocation={authCacheLocation}
       clientId={authConfig.clientId}
       domain={authConfig.domain}
       onRedirectCallback={(appState) => {

@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { UsersService } from './users.service';
 
 const identity = {
@@ -65,6 +66,48 @@ describe('UsersService', () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
+  it('continues after the configured /userinfo timeout and leaves profile fields null', async () => {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValueOnce(null),
+        create: jest.fn().mockResolvedValue(createdUser),
+        update: jest.fn(),
+      },
+    };
+    global.fetch = jest.fn((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    })) as never;
+    const service = new UsersService(prisma as never, config('5'));
+
+    await expect(service.resolveOrCreate(identity.authIssuer, identity.authSubject, 'token', 'https://tenant.example.test/userinfo'))
+      .resolves.toBe(createdUser);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('recovers from a concurrent first-login unique conflict without duplicate enrichment', async () => {
+    const uniqueConflict = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+      code: 'P2002',
+      clientVersion: '6.19.3',
+    });
+    const prisma = {
+      user: {
+        findUnique: jest.fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(createdUser),
+        create: jest.fn().mockRejectedValue(uniqueConflict),
+        update: jest.fn(),
+      },
+    };
+    global.fetch = jest.fn() as never;
+    const service = new UsersService(prisma as never, config());
+
+    await expect(service.resolveOrCreate(identity.authIssuer, identity.authSubject, 'token', 'https://tenant.example.test/userinfo'))
+      .resolves.toBe(createdUser);
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it('does not call /userinfo again for an existing local user', async () => {
     const prisma = {
       user: {
@@ -81,7 +124,7 @@ describe('UsersService', () => {
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
-  function config() {
-    return { get: (key: string) => (key === 'USERINFO_TIMEOUT_MS' ? '1500' : undefined) } as unknown as ConfigService;
+  function config(timeout = '1500') {
+    return { get: (key: string) => (key === 'USERINFO_TIMEOUT_MS' ? timeout : undefined) } as unknown as ConfigService;
   }
 });

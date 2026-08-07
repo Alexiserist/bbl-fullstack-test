@@ -31,12 +31,14 @@ describe('AuthService token validation', () => {
   let requestCount: number;
   let keyOne: SigningFixture;
   let keyTwo: SigningFixture;
+  let keyThree: SigningFixture;
   let service: AuthService;
   const users = { resolveOrCreate: jest.fn().mockResolvedValue(user) };
 
   beforeAll(async () => {
     keyOne = await makeKey('key-one');
     keyTwo = await makeKey('key-two');
+    keyThree = await makeKey('key-three');
     activeKeys = [keyOne.jwk];
     requestCount = 0;
     server = createServer((request, response) => {
@@ -96,6 +98,43 @@ describe('AuthService token validation', () => {
     }
   });
 
+  it('rejects absent or invalid required claims before provisioning a user', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const validClaims = {
+      iss: issuer,
+      sub: 'auth0|subject',
+      aud: audience,
+      exp: now + 300,
+      iat: now,
+      azp: clientId,
+    };
+    const invalidClaims = [
+      without(validClaims, 'sub'),
+      { ...validClaims, sub: '   ' },
+      without(validClaims, 'exp'),
+      { ...validClaims, exp: 'later' },
+      without(validClaims, 'iat'),
+      { ...validClaims, iat: 'now' },
+      { ...validClaims, nbf: 'later' },
+      without(validClaims, 'azp'),
+      { ...validClaims, azp: [clientId] },
+    ];
+
+    for (const claims of invalidClaims) {
+      const token = await signClaims(keyOne, claims);
+      await expect(service.authenticate(`Bearer ${token}`)).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    expect(users.resolveOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('requires an exact Bearer header shape', async () => {
+    const token = await sign(keyOne);
+    for (const header of [undefined, '', token, `bearer ${token}`, `Bearer  ${token}`, `Bearer ${token} extra`]) {
+      await expect(service.authenticate(header)).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    expect(users.resolveOrCreate).not.toHaveBeenCalled();
+  });
+
   it('rejects unsupported and none algorithms', async () => {
     const header = encode({ alg: 'none', typ: 'JWT', kid: keyOne.kid });
     const payload = encode({ iss: issuer, sub: 'auth0|subject', aud: audience, exp: Date.now() / 1000 + 60, iat: Date.now() / 1000, azp: clientId });
@@ -117,6 +156,47 @@ describe('AuthService token validation', () => {
     expect(requestCount).toBeGreaterThanOrEqual(initialRequests + 1);
   });
 
+  it('rejects an unknown kid after refreshing JWKS and never provisions a user', async () => {
+    activeKeys = [keyOne.jwk];
+    const token = await sign(keyThree);
+    const initialRequests = requestCount;
+
+    await expect(service.authenticate(`Bearer ${token}`)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(requestCount).toBeGreaterThanOrEqual(initialRequests + 1);
+    expect(users.resolveOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('supports the configured client_id token profile and rejects azp as a substitute', async () => {
+    const clientIdService = makeService('client_id');
+    const now = Math.floor(Date.now() / 1000);
+    const token = await signClaims(keyOne, {
+      iss: issuer,
+      sub: 'auth0|subject',
+      aud: audience,
+      exp: now + 300,
+      iat: now,
+      client_id: clientId,
+    });
+    const azpOnly = await sign(keyOne);
+
+    await expect(clientIdService.authenticate(`Bearer ${token}`)).resolves.toEqual({
+      localUser: user,
+      claims: expect.objectContaining({ client_id: clientId }),
+    });
+    await expect(clientIdService.authenticate(`Bearer ${azpOnly}`)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('accepts an audience array only when it contains the exact API audience', async () => {
+    const accepted = await sign(keyOne, { audience: [audience, 'https://another-api.example.test'] });
+    const rejected = await sign(keyOne, { audience: ['https://another-api.example.test'] });
+
+    await expect(service.authenticate(`Bearer ${accepted}`)).resolves.toEqual({
+      localUser: user,
+      claims: expect.objectContaining({ aud: expect.arrayContaining([audience]) }),
+    });
+    await expect(service.authenticate(`Bearer ${rejected}`)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
   it('never logs the raw bearer credential on validation failure', async () => {
     const token = await sign(keyOne);
     const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -134,12 +214,12 @@ describe('AuthService token validation', () => {
     return { kid, privateKey, jwk: { ...jwk, kid, alg: 'RS256', use: 'sig' } };
   }
 
-  function makeService() {
+  function makeService(claim: 'azp' | 'client_id' = 'azp') {
     const values: Record<string, string> = {
       AUTH0_ISSUER: issuer,
       AUTH0_AUDIENCE: audience,
       AUTH0_CLIENT_ID: clientId,
-      AUTH0_CLIENT_CLAIM: 'azp',
+      AUTH0_CLIENT_CLAIM: claim,
       AUTH0_JWKS_URI: jwksUri,
       AUTH0_USERINFO_URI: 'http://127.0.0.1/userinfo',
     };
@@ -151,7 +231,7 @@ describe('AuthService token validation', () => {
     fixture: SigningFixture,
     overrides: {
       issuer?: string;
-      audience?: string;
+      audience?: string | string[];
       azp?: string;
       issuedAt?: number;
       notBefore?: number;
@@ -168,6 +248,18 @@ describe('AuthService token validation', () => {
       .setExpirationTime(overrides.expiration ?? now + 300)
       .setNotBefore(overrides.notBefore ?? now)
       .sign(fixture.privateKey);
+  }
+
+  function signClaims(fixture: SigningFixture, claims: Record<string, unknown>) {
+    return new SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid: fixture.kid, typ: 'JWT' })
+      .sign(fixture.privateKey);
+  }
+
+  function without<T extends Record<string, unknown>, K extends keyof T>(value: T, key: K): Omit<T, K> {
+    const copy = { ...value };
+    delete copy[key];
+    return copy;
   }
 
   function encode(value: unknown) {

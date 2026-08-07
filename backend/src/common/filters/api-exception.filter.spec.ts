@@ -48,4 +48,21 @@ describe('ApiExceptionFilter', () => {
       details: [],
     });
   });
+
+  it('maps unexpected exceptions to a generic 500 without exposing internals', () => {
+    const filter = new ApiExceptionFilter();
+    const output = makeHost();
+    const secret = 'database password and raw token';
+
+    filter.catch(new Error(secret), output.host);
+
+    expect(output.status).toHaveBeenCalledWith(500);
+    expect(output.json).toHaveBeenCalledWith({
+      statusCode: 500,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Internal server error',
+      details: [],
+    });
+    expect(JSON.stringify(output.json.mock.calls)).not.toContain(secret);
+  });
 });

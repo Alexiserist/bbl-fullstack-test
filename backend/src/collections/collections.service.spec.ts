@@ -4,6 +4,14 @@ import { CollectionsService } from './collections.service';
 const ownerId = '11111111-1111-4111-8111-111111111111';
 const otherOwnerCollectionId = '22222222-2222-4222-8222-222222222222';
 
+const existingCollection = {
+  id: otherOwnerCollectionId,
+  name: 'Old name',
+  ownerId,
+  createdAt: new Date('2026-08-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-08-01T00:00:00.000Z'),
+};
+
 describe('CollectionsService', () => {
   it('uses owner-first filters and deterministic list ordering', async () => {
     const prisma = {
@@ -52,5 +60,43 @@ describe('CollectionsService', () => {
     const service = new CollectionsService(prisma as never);
 
     await expect(service.remove(ownerId, otherOwnerCollectionId)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it.each(['replace', 'patch'] as const)(
+    '%s keeps both the lookup and update owner-scoped',
+    async (operation) => {
+      const updated = { ...existingCollection, name: 'New name' };
+      const prisma = {
+        collection: {
+          findFirst: jest.fn()
+            .mockResolvedValueOnce(existingCollection)
+            .mockResolvedValueOnce(updated),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+      };
+      const service = new CollectionsService(prisma as never);
+
+      await expect(service[operation](ownerId, otherOwnerCollectionId, { name: updated.name })).resolves.toBe(updated);
+      expect(prisma.collection.findFirst).toHaveBeenNthCalledWith(1, {
+        where: { id: otherOwnerCollectionId, ownerId },
+      });
+      expect(prisma.collection.updateMany).toHaveBeenCalledWith({
+        where: { id: otherOwnerCollectionId, ownerId },
+        data: { name: updated.name },
+      });
+    },
+  );
+
+  it('reports a privacy-preserving not found when an owned update loses a race', async () => {
+    const prisma = {
+      collection: {
+        findFirst: jest.fn().mockResolvedValue(existingCollection),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+    const service = new CollectionsService(prisma as never);
+
+    await expect(service.replace(ownerId, otherOwnerCollectionId, { name: 'New name' }))
+      .rejects.toBeInstanceOf(NotFoundException);
   });
 });
