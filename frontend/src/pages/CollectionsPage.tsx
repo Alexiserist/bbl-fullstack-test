@@ -66,6 +66,7 @@ export function CollectionsPage() {
   const [refreshToken, setRefreshToken] = useState(0);
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [nestedPageByCollection, setNestedPageByCollection] = useState<Record<string, number>>({});
+  const collectionRequestId = useRef(0);
   const nestedCache = useRef<Record<string, Record<number, NestedEntry>>>({});
   const [, redrawNested] = useState(0);
   const [bookmarkDialog, setBookmarkDialog] = useState<BookmarkDialogState>({
@@ -79,24 +80,35 @@ export function CollectionsPage() {
   const [deleting, setDeleting] = useState(false);
 
   const loadCollections = useCallback(() => {
+    const requestId = ++collectionRequestId.current;
     setLoading(true);
     setError('');
     const params = new URLSearchParams({ page: String(page), pageSize: '20' });
     if (appliedFilter) params.set('name', appliedFilter);
     void request<Collection[]>(`/collections?${params.toString()}`)
       .then((response) => {
+        if (requestId !== collectionRequestId.current) return;
         const nextMeta = response.meta ?? defaultMeta;
         setCollections(response.data);
         setMeta(nextMeta);
         if (nextMeta.totalPages === 0 && page !== 1) setPage(1);
         else if (nextMeta.totalPages > 0 && page > nextMeta.totalPages) setPage(nextMeta.totalPages);
       })
-      .catch((cause: unknown) => setError(cause instanceof ApiError ? cause.message : 'Unable to load collections.'))
-      .finally(() => setLoading(false));
+      .catch((cause: unknown) => {
+        if (requestId === collectionRequestId.current) {
+          setError(cause instanceof ApiError ? cause.message : 'Unable to load collections.');
+        }
+      })
+      .finally(() => {
+        if (requestId === collectionRequestId.current) setLoading(false);
+      });
   }, [appliedFilter, page, request]);
 
   useEffect(() => {
     loadCollections();
+    return () => {
+      collectionRequestId.current += 1;
+    };
   }, [loadCollections, refreshToken]);
 
   const setNestedEntry = useCallback((collectionId: string, nestedPage: number, update: (entry: NestedEntry) => NestedEntry) => {

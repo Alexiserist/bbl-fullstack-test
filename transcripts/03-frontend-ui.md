@@ -95,3 +95,27 @@ no-path fallbacks were removed.
 
 The existing dirty implementation transcript and project-agent configuration
 files were preserved and were not folded into this feature's changes.
+
+## Follow-up: collection creation refresh race
+
+### User
+
+> fix bug when create collections it not fetching new data
+
+A deterministic regression test delayed the initial collection-list request,
+created a collection, allowed the post-create refresh to return the new row,
+and then resolved the older request with stale data. Before the fix, the stale
+response replaced the refreshed list and made the new collection disappear.
+
+A control test with normal response ordering passed, disproving the broader
+hypothesis that the create handler did not schedule a refresh. The root cause
+was accepting out-of-order list responses. `CollectionsPage` now assigns each
+list request an increasing generation and ignores stale success, error, and
+loading completions.
+
+Verification after the fix:
+
+- both normal-order and reversed-order creation tests pass;
+- the complete frontend suite passes with 27 tests across seven files;
+- frontend typechecking and the production build pass; and
+- the existing non-blocking bundle-size warning remains.

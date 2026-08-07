@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CollectionsPage } from './CollectionsPage';
 import { collection, bookmark, envelope, listEnvelope } from '../test/fixtures';
+import { deferred } from '../test/mockApi';
+import type { ApiEnvelope, Collection } from '../api/types';
 
 const api = vi.hoisted(() => ({ request: vi.fn() }));
 
@@ -39,6 +41,65 @@ describe('CollectionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reading/i }));
     expect(await screen.findByText('Example article')).toBeInTheDocument();
     expect(api.request).toHaveBeenCalledWith('/collections/collection-1/bookmarks?page=1&pageSize=5');
+  });
+
+  it('keeps the refreshed collection list when an older list request resolves after creation', async () => {
+    const firstList = deferred<ApiEnvelope<Collection[]>>();
+    const created = collection({ id: 'collection-created', name: 'New collection' });
+    let listCalls = 0;
+    api.request.mockImplementation((path: string, init: RequestInit = {}) => {
+      if (path === '/collections?page=1&pageSize=20') {
+        listCalls += 1;
+        return listCalls === 1
+          ? firstList.promise
+          : Promise.resolve(listEnvelope([created], { page: 1, pageSize: 20, total: 1, totalPages: 1 }));
+      }
+      if (path === '/collections' && init.method === 'POST') {
+        return Promise.resolve(envelope(created, { statusCode: 201, message: 'Collection created' }));
+      }
+      throw new Error(`Unexpected API request ${init.method ?? 'GET'} ${path}`);
+    });
+
+    render(<MemoryRouter><CollectionsPage /></MemoryRouter>);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: created.name } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(await screen.findByText(created.name)).toBeInTheDocument();
+    expect(listCalls).toBe(2);
+
+    await act(async () => {
+      firstList.resolve(listEnvelope([], { page: 1, pageSize: 20, total: 0, totalPages: 0 }));
+      await firstList.promise;
+    });
+    expect(screen.getByText(created.name)).toBeInTheDocument();
+  });
+
+  it('fetches the first page again and shows the created collection', async () => {
+    const created = collection({ id: 'collection-created', name: 'New collection' });
+    let listCalls = 0;
+    api.request.mockImplementation((path: string, init: RequestInit = {}) => {
+      if (path === '/collections?page=1&pageSize=20') {
+        listCalls += 1;
+        return Promise.resolve(listEnvelope(listCalls === 1 ? [] : [created], {
+          page: 1,
+          pageSize: 20,
+          total: listCalls === 1 ? 0 : 1,
+          totalPages: listCalls === 1 ? 0 : 1,
+        }));
+      }
+      if (path === '/collections' && init.method === 'POST') {
+        return Promise.resolve(envelope(created, { statusCode: 201, message: 'Collection created' }));
+      }
+      throw new Error(`Unexpected API request ${init.method ?? 'GET'} ${path}`);
+    });
+
+    render(<MemoryRouter><CollectionsPage /></MemoryRouter>);
+    expect(await screen.findByText('No collections match this view yet.')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: created.name } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(await screen.findByText(created.name)).toBeInTheDocument();
+    expect(listCalls).toBe(2);
   });
 
   it('caches expanded pages and closes the previous collection when another opens', async () => {
