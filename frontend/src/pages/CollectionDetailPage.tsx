@@ -21,6 +21,7 @@ export function CollectionDetailPage() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [meta, setMeta] = useState<PageMeta>(emptyMeta);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(emptyMeta.pageSize);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,7 +39,7 @@ export function CollectionDetailPage() {
     let active = true;
     setLoading(true);
     setError('');
-    const query = `?page=${page}&pageSize=20`;
+    const query = `?page=${page}&pageSize=${pageSize}`;
     void Promise.all([
       request<Collection>(`/collections/${id}`),
       request<Bookmark[]>(`/collections/${id}/bookmarks${query}`),
@@ -61,7 +62,7 @@ export function CollectionDetailPage() {
     return () => {
       active = false;
     };
-  }, [id, page, refreshToken, request]);
+  }, [id, page, pageSize, refreshToken, request]);
 
   const ensureBookmarkCollections = () => {
     if (bookmarkCollections.length > 0) return;
@@ -120,14 +121,22 @@ export function CollectionDetailPage() {
       </Stack>
       {error && <ErrorState message={error} />}
       <Divider />
-      {bookmarks.length === 0 ? <EmptyState>This collection has no bookmarks.</EmptyState> : (
-        <Stack spacing={2}>
-          {bookmarks.map((bookmark) => (
-            <BookmarkCard key={bookmark.id} bookmark={bookmark} onDelete={setBookmarkToDelete} onEdit={openEditBookmark} />
-          ))}
-          <PaginationControls meta={meta} onPage={setPage} />
-        </Stack>
-      )}
+      <Stack spacing={2}>
+        {bookmarks.length === 0
+          ? <EmptyState>This collection has no bookmarks.</EmptyState>
+          : bookmarks.map((bookmark) => (
+              <BookmarkCard key={bookmark.id} bookmark={bookmark} onDelete={setBookmarkToDelete} onEdit={openEditBookmark} />
+            ))}
+        <PaginationControls
+          meta={{ ...meta, pageSize }}
+          onPage={setPage}
+          onPageSize={(nextPageSize) => {
+            setPage(1);
+            setPageSize(nextPageSize);
+            setMeta((current) => ({ ...current, page: 1, pageSize: nextPageSize }));
+          }}
+        />
+      </Stack>
 
       <BookmarkFormDialog
         bookmark={bookmarkDialog.bookmark}

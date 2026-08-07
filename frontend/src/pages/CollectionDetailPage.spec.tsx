@@ -41,6 +41,26 @@ describe('CollectionDetailPage', () => {
     expect(api.request).toHaveBeenCalledWith('/collections/collection-1/bookmarks?page=1&pageSize=20');
   });
 
+  it('resets to page one and requests the selected detail page size', async () => {
+    api.request.mockImplementation((path: string) => {
+      if (path === '/collections/collection-1') return Promise.resolve(envelope(reading));
+      if (path === '/collections/collection-1/bookmarks?page=1&pageSize=20') {
+        return Promise.resolve(listEnvelope([bookmark()], { page: 1, pageSize: 20, total: 1, totalPages: 1 }));
+      }
+      if (path === '/collections/collection-1/bookmarks?page=1&pageSize=50') {
+        return Promise.resolve(listEnvelope([bookmark()], { page: 1, pageSize: 50, total: 1, totalPages: 1 }));
+      }
+      throw new Error(`Unexpected API request ${path}`);
+    });
+
+    renderDetail();
+    expect(await screen.findByText('Example article')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Items per page' }));
+    fireEvent.click(await screen.findByRole('option', { name: '50' }));
+
+    await waitFor(() => expect(api.request).toHaveBeenCalledWith('/collections/collection-1/bookmarks?page=1&pageSize=50'));
+  });
+
   it('preselects the route collection when adding a bookmark and refreshes nested data', async () => {
     const created = bookmark({ id: 'bookmark-created', title: 'Added in Reading' });
     let nestedCalls = 0;

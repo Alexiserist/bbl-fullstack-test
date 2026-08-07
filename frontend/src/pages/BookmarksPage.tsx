@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -29,6 +29,7 @@ export function BookmarksPage() {
   const [filter, setFilter] = useState<BookmarkFilter>('all');
   const [meta, setMeta] = useState<PageMeta>(emptyMeta);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(emptyMeta.pageSize);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [optionsLoading, setOptionsLoading] = useState(true);
@@ -41,6 +42,7 @@ export function BookmarksPage() {
   });
   const [bookmarkToDelete, setBookmarkToDelete] = useState<Bookmark | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const bookmarkRequestId = useRef(0);
 
   const loadCollectionOptions = useCallback(async () => {
     setOptionsLoading(true);
@@ -58,25 +60,36 @@ export function BookmarksPage() {
   }, [loadCollectionOptions]);
 
   const loadBookmarks = useCallback(() => {
+    const requestId = ++bookmarkRequestId.current;
     setLoading(true);
     setError('');
-    const params = new URLSearchParams({ page: String(page), pageSize: '20' });
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (filter === 'uncategorized') params.set('uncategorized', 'true');
     if (filter !== 'all' && filter !== 'uncategorized') params.set('collectionId', filter);
     void request<Bookmark[]>(`/bookmarks?${params.toString()}`)
       .then((response) => {
+        if (requestId !== bookmarkRequestId.current) return;
         const nextMeta = response.meta ?? emptyMeta;
         setBookmarks(response.data);
         setMeta(nextMeta);
         if (nextMeta.totalPages === 0 && page !== 1) setPage(1);
         else if (nextMeta.totalPages > 0 && page > nextMeta.totalPages) setPage(nextMeta.totalPages);
       })
-      .catch((cause: unknown) => setError(cause instanceof ApiError ? cause.message : 'Unable to load bookmarks.'))
-      .finally(() => setLoading(false));
-  }, [filter, page, request]);
+      .catch((cause: unknown) => {
+        if (requestId === bookmarkRequestId.current) {
+          setError(cause instanceof ApiError ? cause.message : 'Unable to load bookmarks.');
+        }
+      })
+      .finally(() => {
+        if (requestId === bookmarkRequestId.current) setLoading(false);
+      });
+  }, [filter, page, pageSize, request]);
 
   useEffect(() => {
     loadBookmarks();
+    return () => {
+      bookmarkRequestId.current += 1;
+    };
   }, [loadBookmarks, refreshToken]);
 
   const openCreateBookmark = () => setBookmarkDialog({ open: true, mode: 'create', bookmark: null });
@@ -131,18 +144,28 @@ export function BookmarksPage() {
 
       {optionsLoading && <Typography color="text.secondary" variant="body2">Loading collection filters...</Typography>}
       {error && <ErrorState message={error} />}
-      {loading ? <LoadingState label="Loading bookmarks..." /> : bookmarks.length === 0 ? <EmptyState>No bookmarks match this view yet.</EmptyState> : (
+      {loading ? <LoadingState label="Loading bookmarks..." /> : (
         <Stack spacing={2}>
-          {bookmarks.map((bookmark) => (
-            <BookmarkCard
-              bookmark={bookmark}
-              key={bookmark.id}
-              onDelete={setBookmarkToDelete}
-              onEdit={openEditBookmark}
-              collectionName={collections.find((collection) => collection.id === bookmark.collectionId)?.name}
-            />
-          ))}
-          <PaginationControls meta={meta} onPage={setPage} />
+          {bookmarks.length === 0
+            ? <EmptyState>No bookmarks match this view yet.</EmptyState>
+            : bookmarks.map((bookmark) => (
+                <BookmarkCard
+                  bookmark={bookmark}
+                  key={bookmark.id}
+                  onDelete={setBookmarkToDelete}
+                  onEdit={openEditBookmark}
+                  collectionName={collections.find((collection) => collection.id === bookmark.collectionId)?.name}
+                />
+              ))}
+          <PaginationControls
+            meta={{ ...meta, pageSize }}
+            onPage={setPage}
+            onPageSize={(nextPageSize) => {
+              setPage(1);
+              setPageSize(nextPageSize);
+              setMeta((current) => ({ ...current, page: 1, pageSize: nextPageSize }));
+            }}
+          />
         </Stack>
       )}
 

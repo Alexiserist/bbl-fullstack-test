@@ -102,6 +102,53 @@ describe('CollectionsPage', () => {
     expect(listCalls).toBe(2);
   });
 
+  it('resets to page one and requests the selected collection page size', async () => {
+    api.request.mockImplementation((path: string) => {
+      if (path === '/collections?page=1&pageSize=20') {
+        return Promise.resolve(listEnvelope(collections, { page: 1, pageSize: 20, total: 2, totalPages: 1 }));
+      }
+      if (path === '/collections?page=1&pageSize=50') {
+        return Promise.resolve(listEnvelope(collections, { page: 1, pageSize: 50, total: 2, totalPages: 1 }));
+      }
+      throw new Error(`Unexpected API request ${path}`);
+    });
+
+    render(<MemoryRouter><CollectionsPage /></MemoryRouter>);
+    expect(await screen.findByText('Reading')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Items per page' }));
+    fireEvent.click(await screen.findByRole('option', { name: '50' }));
+
+    await waitFor(() => expect(api.request).toHaveBeenCalledWith('/collections?page=1&pageSize=50'));
+  });
+
+  it('requests the selected page size inside an expanded collection', async () => {
+    api.request.mockImplementation((path: string) => {
+      if (path === '/collections?page=1&pageSize=20') {
+        return Promise.resolve(listEnvelope([collections[0]], { page: 1, pageSize: 20, total: 1, totalPages: 1 }));
+      }
+      if (path === '/collections/collection-1/bookmarks?page=1&pageSize=5') {
+        return Promise.resolve(listEnvelope([bookmark()], { page: 1, pageSize: 5, total: 1, totalPages: 1 }));
+      }
+      if (path === '/collections/collection-1/bookmarks?page=1&pageSize=10') {
+        return Promise.resolve(listEnvelope([bookmark()], { page: 1, pageSize: 10, total: 1, totalPages: 1 }));
+      }
+      throw new Error(`Unexpected API request ${path}`);
+    });
+
+    render(<MemoryRouter><CollectionsPage /></MemoryRouter>);
+    expect(await screen.findByText('Reading')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Reading/i }));
+    expect(await screen.findByText('Example article')).toBeInTheDocument();
+
+    const nestedPageSize = screen.getAllByRole('combobox', { name: 'Items per page' })
+      .find((selector) => selector.textContent?.trim() === '5');
+    expect(nestedPageSize).toBeDefined();
+    fireEvent.mouseDown(nestedPageSize!);
+    fireEvent.click(await screen.findByRole('option', { name: '10' }));
+
+    await waitFor(() => expect(api.request).toHaveBeenCalledWith('/collections/collection-1/bookmarks?page=1&pageSize=10'));
+  });
+
   it('caches expanded pages and closes the previous collection when another opens', async () => {
     api.request.mockImplementation((path: string) => {
       if (path === '/collections?page=1&pageSize=20') return Promise.resolve(listEnvelope(collections, { total: 2, totalPages: 1 }));

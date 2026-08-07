@@ -99,15 +99,17 @@ The signed-in UI provides:
 - reusable MUI dialogs for creating and editing complete bookmark data;
 - bookmark filtering by all items, uncategorized items, or one owned
   collection;
+- page-size selectors for collection, bookmark, collection-detail, and
+  expanded-collection lists;
 - create, edit, and delete actions from list and detail views, with accessible
   confirmations and consistent feedback; and
 - collection selectors that follow every API page instead of silently stopping
   at the first 100 collections.
 
-The accordion preview intentionally shows five bookmarks per nested page. The
-dedicated collection detail route retains the API's normal 20-item page size.
-Bookmark title/URL search is not implemented because it is outside the core API
-contract.
+Accordion previews default to five bookmarks per nested page, while full list
+and detail routes default to 20. Each list can select 5, 10, 20, 50, or 100
+items per page and resets to page 1 when that value changes. Bookmark title/URL
+search is not implemented because it is outside the core API contract.
 
 Frontend checks are:
 

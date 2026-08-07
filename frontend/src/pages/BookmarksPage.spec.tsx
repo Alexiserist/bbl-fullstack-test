@@ -47,7 +47,7 @@ describe('BookmarksPage', () => {
     expect(api.request).toHaveBeenCalledWith('/collections?page=1&pageSize=100');
     expect(api.request).toHaveBeenCalledWith('/collections?page=2&pageSize=100');
 
-    const filter = screen.getByRole('combobox');
+    const filter = screen.getByRole('combobox', { name: 'Show' });
     fireEvent.mouseDown(filter);
     expect(await screen.findByRole('option', { name: 'Later collection' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'Later collection' }));
@@ -70,13 +70,43 @@ describe('BookmarksPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
     expect(await screen.findByText('Page two')).toBeInTheDocument();
 
-    const filter = screen.getByRole('combobox');
+    const filter = screen.getByRole('combobox', { name: 'Show' });
     fireEvent.mouseDown(filter);
     fireEvent.click(await screen.findByRole('option', { name: 'Uncategorized' }));
     await waitFor(() => expect(api.request).toHaveBeenCalledWith('/bookmarks?page=1&pageSize=20&uncategorized=true'));
     const uncategorizedCall = api.request.mock.calls.find(([path]) => routeFrom(path).params.has('uncategorized'));
     expect(uncategorizedCall).toBeDefined();
     expect(routeFrom(uncategorizedCall![0]).params.has('collectionId')).toBe(false);
+  });
+
+  it('resets to page one and requests the selected bookmark page size', async () => {
+    api.request.mockImplementation((path: string) => {
+      const route = routeFrom(path);
+      if (route.pathname === '/collections') {
+        return Promise.resolve(listEnvelope([reading], { page: 1, pageSize: 100, total: 1, totalPages: 1 }));
+      }
+      if (route.pathname === '/bookmarks' && route.params.get('page') === '1' && route.params.get('pageSize') === '20') {
+        return Promise.resolve(listResponse([bookmark()], 1, 41, 3));
+      }
+      if (route.pathname === '/bookmarks' && route.params.get('page') === '2' && route.params.get('pageSize') === '20') {
+        return Promise.resolve(listResponse([bookmark({ id: 'bookmark-page-2', title: 'Page two' })], 2, 41, 3));
+      }
+      if (route.pathname === '/bookmarks' && route.params.get('page') === '1' && route.params.get('pageSize') === '50') {
+        return Promise.resolve(listEnvelope([], { page: 1, pageSize: 50, total: 41, totalPages: 1 }));
+      }
+      throw new Error(`Unexpected API request ${String(path)}`);
+    });
+
+    render(<MemoryRouter><BookmarksPage /></MemoryRouter>);
+    expect(await screen.findByText('Example article')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Page two')).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Items per page' }));
+    fireEvent.click(await screen.findByRole('option', { name: '50' }));
+
+    await waitFor(() => expect(api.request).toHaveBeenCalledWith('/bookmarks?page=1&pageSize=50'));
+    expect(await screen.findByText('No bookmarks match this view yet.')).toBeInTheDocument();
   });
 
   it('creates through the shared dialog and refreshes the active page after success', async () => {

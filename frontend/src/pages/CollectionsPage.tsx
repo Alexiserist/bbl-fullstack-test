@@ -25,7 +25,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { PaginationControls } from '../components/PaginationControls';
 
 const defaultMeta: PageMeta = { page: 1, pageSize: 20, total: 0, totalPages: 0 };
-const nestedPageSize = 5;
+const defaultNestedPageSize = 5;
 
 interface NestedEntry {
   bookmarks: Bookmark[];
@@ -35,9 +35,9 @@ interface NestedEntry {
   error: string;
 }
 
-const emptyNestedEntry = (): NestedEntry => ({
+const emptyNestedEntry = (pageSize = defaultNestedPageSize): NestedEntry => ({
   bookmarks: [],
-  meta: { page: 1, pageSize: nestedPageSize, total: 0, totalPages: 0 },
+  meta: { page: 1, pageSize, total: 0, totalPages: 0 },
   loading: false,
   loaded: false,
   error: '',
@@ -57,6 +57,7 @@ export function CollectionsPage() {
   const [bookmarkCollectionsLoaded, setBookmarkCollectionsLoaded] = useState(false);
   const [meta, setMeta] = useState<PageMeta>(defaultMeta);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultMeta.pageSize);
   const [filter, setFilter] = useState('');
   const [appliedFilter, setAppliedFilter] = useState('');
   const [name, setName] = useState('');
@@ -66,8 +67,9 @@ export function CollectionsPage() {
   const [refreshToken, setRefreshToken] = useState(0);
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [nestedPageByCollection, setNestedPageByCollection] = useState<Record<string, number>>({});
+  const [nestedPageSizeByCollection, setNestedPageSizeByCollection] = useState<Record<string, number>>({});
   const collectionRequestId = useRef(0);
-  const nestedCache = useRef<Record<string, Record<number, NestedEntry>>>({});
+  const nestedCache = useRef<Record<string, Record<string, NestedEntry>>>({});
   const [, redrawNested] = useState(0);
   const [bookmarkDialog, setBookmarkDialog] = useState<BookmarkDialogState>({
     open: false,
@@ -83,7 +85,7 @@ export function CollectionsPage() {
     const requestId = ++collectionRequestId.current;
     setLoading(true);
     setError('');
-    const params = new URLSearchParams({ page: String(page), pageSize: '20' });
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (appliedFilter) params.set('name', appliedFilter);
     void request<Collection[]>(`/collections?${params.toString()}`)
       .then((response) => {
@@ -102,7 +104,7 @@ export function CollectionsPage() {
       .finally(() => {
         if (requestId === collectionRequestId.current) setLoading(false);
       });
-  }, [appliedFilter, page, request]);
+  }, [appliedFilter, page, pageSize, request]);
 
   useEffect(() => {
     loadCollections();
@@ -111,33 +113,35 @@ export function CollectionsPage() {
     };
   }, [loadCollections, refreshToken]);
 
-  const setNestedEntry = useCallback((collectionId: string, nestedPage: number, update: (entry: NestedEntry) => NestedEntry) => {
+  const setNestedEntry = useCallback((collectionId: string, nestedPage: number, nestedPageSize: number, update: (entry: NestedEntry) => NestedEntry) => {
     const collectionCache = nestedCache.current[collectionId] ?? {};
-    const current = collectionCache[nestedPage] ?? emptyNestedEntry();
-    collectionCache[nestedPage] = update(current);
+    const cacheKey = `${nestedPageSize}:${nestedPage}`;
+    const current = collectionCache[cacheKey] ?? emptyNestedEntry(nestedPageSize);
+    collectionCache[cacheKey] = update(current);
     nestedCache.current[collectionId] = collectionCache;
     redrawNested((value) => value + 1);
   }, []);
 
-  const loadNestedBookmarks = useCallback((collectionId: string, nestedPage: number, force = false) => {
-    const cached = nestedCache.current[collectionId]?.[nestedPage];
+  const loadNestedBookmarks = useCallback((collectionId: string, nestedPage: number, nestedPageSize: number, force = false) => {
+    const cacheKey = `${nestedPageSize}:${nestedPage}`;
+    const cached = nestedCache.current[collectionId]?.[cacheKey];
     if (!force && (cached?.loading || cached?.loaded)) return;
-    setNestedEntry(collectionId, nestedPage, (entry) => ({ ...entry, loading: true, error: '' }));
+    setNestedEntry(collectionId, nestedPage, nestedPageSize, (entry) => ({ ...entry, loading: true, error: '' }));
     const params = new URLSearchParams({ page: String(nestedPage), pageSize: String(nestedPageSize) });
     void request<Bookmark[]>(`/collections/${collectionId}/bookmarks?${params.toString()}`)
       .then((response) => {
-        const nextMeta = response.meta ?? emptyNestedEntry().meta;
+        const nextMeta = response.meta ?? emptyNestedEntry(nestedPageSize).meta;
         if (nextMeta.totalPages === 0 && nestedPage !== 1) {
           setNestedPageByCollection((current) => ({ ...current, [collectionId]: 1 }));
-          loadNestedBookmarks(collectionId, 1, true);
+          loadNestedBookmarks(collectionId, 1, nestedPageSize, true);
           return;
         }
         if (nextMeta.totalPages > 0 && nestedPage > nextMeta.totalPages) {
           setNestedPageByCollection((current) => ({ ...current, [collectionId]: nextMeta.totalPages }));
-          loadNestedBookmarks(collectionId, nextMeta.totalPages, true);
+          loadNestedBookmarks(collectionId, nextMeta.totalPages, nestedPageSize, true);
           return;
         }
-        setNestedEntry(collectionId, nestedPage, (entry) => ({
+        setNestedEntry(collectionId, nestedPage, nestedPageSize, (entry) => ({
           ...entry,
           bookmarks: response.data,
           meta: nextMeta,
@@ -147,7 +151,7 @@ export function CollectionsPage() {
         }));
       })
       .catch((cause: unknown) => {
-        setNestedEntry(collectionId, nestedPage, (entry) => ({
+        setNestedEntry(collectionId, nestedPage, nestedPageSize, (entry) => ({
           ...entry,
           loading: false,
           loaded: false,
@@ -161,12 +165,13 @@ export function CollectionsPage() {
     for (const collectionId of uniqueCollectionIds) {
       delete nestedCache.current[collectionId];
       if (refreshExpanded && expandedCollectionId === collectionId) {
+        const expandedPageSize = nestedPageSizeByCollection[collectionId] ?? defaultNestedPageSize;
         setNestedPageByCollection((current) => ({ ...current, [collectionId]: 1 }));
-        loadNestedBookmarks(collectionId, 1, true);
+        loadNestedBookmarks(collectionId, 1, expandedPageSize, true);
       }
     }
     redrawNested((value) => value + 1);
-  }, [expandedCollectionId, loadNestedBookmarks]);
+  }, [expandedCollectionId, loadNestedBookmarks, nestedPageSizeByCollection]);
 
   const submitFilter = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -247,9 +252,10 @@ export function CollectionsPage() {
     invalidateNested([originalCollectionId, saved.collectionId], false);
     setNotice(bookmarkDialog.mode === 'edit' ? 'Bookmark updated.' : 'Bookmark created.');
     if (saved.collectionId) {
+      const savedCollectionPageSize = nestedPageSizeByCollection[saved.collectionId] ?? defaultNestedPageSize;
       setExpandedCollectionId(saved.collectionId);
       setNestedPageByCollection((current) => ({ ...current, [saved.collectionId!]: 1 }));
-      loadNestedBookmarks(saved.collectionId, 1, true);
+      loadNestedBookmarks(saved.collectionId, 1, savedCollectionPageSize, true);
     }
   };
 
@@ -268,27 +274,35 @@ export function CollectionsPage() {
 
   const renderNested = (collection: Collection) => {
     const nestedPage = nestedPageByCollection[collection.id] ?? 1;
-    const entry = nestedCache.current[collection.id]?.[nestedPage] ?? emptyNestedEntry();
+    const nestedPageSize = nestedPageSizeByCollection[collection.id] ?? defaultNestedPageSize;
+    const cacheKey = `${nestedPageSize}:${nestedPage}`;
+    const entry = nestedCache.current[collection.id]?.[cacheKey] ?? emptyNestedEntry(nestedPageSize);
     if (entry.loading && !entry.loaded) return <LoadingState label="Loading bookmarks..." />;
     if (entry.error) {
       return (
         <Stack spacing={1}>
           <ErrorState message={entry.error} />
-          <Button onClick={() => loadNestedBookmarks(collection.id, nestedPage, true)} size="small">Try again</Button>
+          <Button onClick={() => loadNestedBookmarks(collection.id, nestedPage, nestedPageSize, true)} size="small">Try again</Button>
         </Stack>
       );
     }
-    if (entry.bookmarks.length === 0) return <EmptyState>No bookmarks in this collection yet.</EmptyState>;
     return (
       <Stack spacing={2}>
-        {entry.bookmarks.map((bookmark) => (
-          <BookmarkCard key={bookmark.id} bookmark={bookmark} onDelete={setBookmarkToDelete} onEdit={openEditBookmark} />
-        ))}
+        {entry.bookmarks.length === 0
+          ? <EmptyState>No bookmarks in this collection yet.</EmptyState>
+          : entry.bookmarks.map((bookmark) => (
+              <BookmarkCard key={bookmark.id} bookmark={bookmark} onDelete={setBookmarkToDelete} onEdit={openEditBookmark} />
+            ))}
         <PaginationControls
           meta={entry.meta}
           onPage={(nextPage) => {
             setNestedPageByCollection((current) => ({ ...current, [collection.id]: nextPage }));
-            loadNestedBookmarks(collection.id, nextPage);
+            loadNestedBookmarks(collection.id, nextPage, nestedPageSize);
+          }}
+          onPageSize={(nextPageSize) => {
+            setNestedPageSizeByCollection((current) => ({ ...current, [collection.id]: nextPageSize }));
+            setNestedPageByCollection((current) => ({ ...current, [collection.id]: 1 }));
+            loadNestedBookmarks(collection.id, 1, nextPageSize);
           }}
         />
       </Stack>
@@ -325,9 +339,9 @@ export function CollectionsPage() {
 
       {error && <ErrorState message={error} />}
       <Divider />
-      {loading ? <LoadingState label="Loading collections..." /> : collections.length === 0 ? <EmptyState>No collections match this view yet.</EmptyState> : (
+      {loading ? <LoadingState label="Loading collections..." /> : (
         <Stack spacing={2}>
-          {collections.map((collection) => {
+          {collections.length === 0 ? <EmptyState>No collections match this view yet.</EmptyState> : collections.map((collection) => {
             const expanded = expandedCollectionId === collection.id;
             return (
               <Accordion
@@ -338,7 +352,8 @@ export function CollectionsPage() {
                   setExpandedCollectionId(isExpanded ? collection.id : null);
                   if (isExpanded) {
                     const nestedPage = nestedPageByCollection[collection.id] ?? 1;
-                    loadNestedBookmarks(collection.id, nestedPage);
+                    const nestedPageSize = nestedPageSizeByCollection[collection.id] ?? defaultNestedPageSize;
+                    loadNestedBookmarks(collection.id, nestedPage, nestedPageSize);
                   }
                 }}
                 variant="outlined"
@@ -360,7 +375,15 @@ export function CollectionsPage() {
               </Accordion>
             );
           })}
-          <PaginationControls meta={meta} onPage={setPage} />
+          <PaginationControls
+            meta={{ ...meta, pageSize }}
+            onPage={setPage}
+            onPageSize={(nextPageSize) => {
+              setPage(1);
+              setPageSize(nextPageSize);
+              setMeta((current) => ({ ...current, page: 1, pageSize: nextPageSize }));
+            }}
+          />
         </Stack>
       )}
 

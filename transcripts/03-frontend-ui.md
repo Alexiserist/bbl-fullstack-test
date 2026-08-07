@@ -119,3 +119,27 @@ Verification after the fix:
 - the complete frontend suite passes with 27 tests across seven files;
 - frontend typechecking and the production build pass; and
 - the existing non-blocking bundle-size warning remains.
+
+## Follow-up: page-size selectors
+
+### User
+
+> add pagesize selector too
+
+The shared pagination control now offers 5, 10, 20, 50, and 100 items per page.
+It is used by the collection list, bookmark list, collection detail list, and
+each expanded collection. Full lists retain a default of 20; accordion previews
+retain a default of five. A change resets only that list to page 1 and includes
+the selected `pageSize` in the existing API request.
+
+Nested collection caches are keyed by both page and page size so responses for
+one selection cannot replace another. Bookmark list requests also use request
+generations to prevent an older page-size response from overwriting a newer
+selection.
+
+Verification after this addition:
+
+- the complete frontend suite passes with 31 tests across seven files;
+- collection, bookmark, detail, and accordion selector requests are covered;
+- frontend typechecking and the production build pass; and
+- the existing non-blocking bundle-size warning remains.

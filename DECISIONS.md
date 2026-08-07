@@ -638,24 +638,28 @@ without adding filtering or resource behavior outside the assignment.
 Use one reusable bookmark dialog across list and detail views. Creation sends
 `POST /bookmarks`; editing submits the complete writable representation with
 `PUT /bookmarks/:id`. Collection rows use single-open MUI accordions and load
-five bookmarks only when expanded through the existing nested endpoint.
-Loaded nested pages are cached until a related create, edit, or delete
-invalidates them. The bookmark list continues to support only All,
-Uncategorized, or one owned collection, and collection selectors follow all
-paginated collection results in 100-item API pages.
+bookmarks only when expanded through the existing nested endpoint, defaulting
+to five items. Loaded nested pages are cached until a related create, edit, or
+delete invalidates them. Every visible list offers page sizes 5, 10, 20, 50,
+and 100 and resets to page 1 when the selection changes. The bookmark list
+continues to support only All, Uncategorized, or one owned collection, and
+collection selectors follow all paginated collection results in 100-item API
+pages.
 
 ### Rationale and trade-offs
 
 The shared dialog keeps validation and null normalization consistent while the
-lazy accordion avoids requesting bookmark pages the user has not opened. Five
-items keeps the collection list compact; the dedicated detail route remains at
-20 items for deeper browsing. Cache invalidation adds frontend state handling,
-so tests explicitly cover moves between collections, deletion, nested
-pagination, and out-of-range pages.
+lazy accordion avoids requesting bookmark pages the user has not opened. A
+five-item accordion default keeps the collection list compact, while users can
+choose a larger page and full lists retain a 20-item default. Cache invalidation
+adds frontend state handling, so tests explicitly cover moves between
+collections, deletion, nested pagination, page-size changes, and out-of-range
+pages.
 
 ### Evidence
 
 - Frontend Vitest and React Testing Library suites cover the dialog and all
-  four resource pages: 25 tests across seven test files.
+  four resource pages, including page-size changes: 31 tests across seven test
+  files.
 - Frontend typechecking and the Vite production build pass. The build retains
   the existing non-blocking warning for a JavaScript chunk larger than 500 kB.
