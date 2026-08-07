@@ -643,8 +643,8 @@ to five items. Loaded nested pages are cached until a related create, edit, or
 delete invalidates them. Every visible list offers page sizes 5, 10, 20, 50,
 and 100 and resets to page 1 when the selection changes. The bookmark list
 continues to support only All, Uncategorized, or one owned collection, and
-collection selectors follow all paginated collection results in 100-item API
-pages.
+its MUI dropdown searches those collection options locally. Collection
+selectors follow all paginated collection results in 100-item API pages.
 
 ### Rationale and trade-offs
 

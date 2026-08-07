@@ -143,3 +143,26 @@ Verification after this addition:
 - collection, bookmark, detail, and accordion selector requests are covered;
 - frontend typechecking and the production build pass; and
 - the existing non-blocking bundle-size warning remains.
+
+## Follow-up: searchable bookmark collection filter
+
+### User
+
+> add search filter at dropdown show bookmarks
+
+The bookmark page's **Show** control now uses MUI Autocomplete. A person can
+type part of a collection name to narrow the locally loaded options, then show
+bookmarks from that owned collection. **All bookmarks** and **Uncategorized**
+remain available in the same control.
+
+This changes only how the existing collection filter is selected. It does not
+add title, URL, owner, or full-text bookmark search, and the API still receives
+only the documented `collectionId` or `uncategorized=true` parameter.
+
+Verification after this addition:
+
+- the interaction test proves typing narrows collection options loaded from a
+  later API page and selecting one sends its `collectionId`;
+- the complete frontend suite passes with 31 tests across seven files;
+- frontend typechecking and the production build pass; and
+- the existing non-blocking bundle-size warning remains.

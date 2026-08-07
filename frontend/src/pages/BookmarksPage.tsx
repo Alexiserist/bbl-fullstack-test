@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Button,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
   Snackbar,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import { ApiError, useApiRequest } from '../api/client';
@@ -21,12 +19,17 @@ import { PaginationControls } from '../components/PaginationControls';
 
 const emptyMeta: PageMeta = { page: 1, pageSize: 20, total: 0, totalPages: 0 };
 type BookmarkFilter = 'all' | 'uncategorized' | string;
+interface BookmarkFilterOption {
+  label: string;
+  value: BookmarkFilter;
+}
 
 export function BookmarksPage() {
   const request = useApiRequest();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [filter, setFilter] = useState<BookmarkFilter>('all');
+  const [filterInput, setFilterInput] = useState('All bookmarks');
   const [meta, setMeta] = useState<PageMeta>(emptyMeta);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(emptyMeta.pageSize);
@@ -43,6 +46,12 @@ export function BookmarksPage() {
   const [bookmarkToDelete, setBookmarkToDelete] = useState<Bookmark | null>(null);
   const [deleting, setDeleting] = useState(false);
   const bookmarkRequestId = useRef(0);
+  const filterOptions = useMemo<BookmarkFilterOption[]>(() => [
+    { label: 'All bookmarks', value: 'all' },
+    { label: 'Uncategorized', value: 'uncategorized' },
+    ...collections.map((collection) => ({ label: collection.name, value: collection.id })),
+  ], [collections]);
+  const selectedFilterOption = filterOptions.find((option) => option.value === filter) ?? filterOptions[0];
 
   const loadCollectionOptions = useCallback(async () => {
     setOptionsLoading(true);
@@ -128,21 +137,28 @@ export function BookmarksPage() {
         <Button onClick={openCreateBookmark} variant="contained">Add bookmark</Button>
       </Stack>
 
-      <FormControl fullWidth sx={{ maxWidth: { sm: 360 } }}>
-        <InputLabel id="bookmark-filter-label">Show</InputLabel>
-        <Select
-          label="Show"
-          labelId="bookmark-filter-label"
-          onChange={(event) => { setFilter(String(event.target.value)); setPage(1); }}
-          value={filter}
-        >
-          <MenuItem value="all">All bookmarks</MenuItem>
-          <MenuItem value="uncategorized">Uncategorized</MenuItem>
-          {collections.map((collection) => <MenuItem key={collection.id} value={collection.id}>{collection.name}</MenuItem>)}
-        </Select>
-      </FormControl>
-
-      {optionsLoading && <Typography color="text.secondary" variant="body2">Loading collection filters...</Typography>}
+      <Autocomplete
+        disableClearable
+        getOptionLabel={(option) => option.label}
+        inputValue={filterInput}
+        isOptionEqualToValue={(option, value) => option.value === value.value}
+        loading={optionsLoading}
+        loadingText="Loading collections..."
+        noOptionsText="No collections found"
+        onChange={(_event, option) => {
+          setFilter(option.value);
+          setFilterInput(option.label);
+          setPage(1);
+        }}
+        onInputChange={(_event, value, reason) => {
+          if (reason === 'input' || reason === 'clear') setFilterInput(value);
+          if (reason === 'blur') setFilterInput(selectedFilterOption.label);
+        }}
+        options={filterOptions}
+        renderInput={(params) => <TextField {...params} label="Show" placeholder="Search collections" />}
+        sx={{ maxWidth: { sm: 360 } }}
+        value={selectedFilterOption}
+      />
       {error && <ErrorState message={error} />}
       {loading ? <LoadingState label="Loading bookmarks..." /> : (
         <Stack spacing={2}>

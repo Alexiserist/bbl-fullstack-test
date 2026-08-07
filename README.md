@@ -98,7 +98,7 @@ The signed-in UI provides:
   previews;
 - reusable MUI dialogs for creating and editing complete bookmark data;
 - bookmark filtering by all items, uncategorized items, or one owned
-  collection;
+  collection through a searchable MUI dropdown;
 - page-size selectors for collection, bookmark, collection-detail, and
   expanded-collection lists;
 - create, edit, and delete actions from list and detail views, with accessible

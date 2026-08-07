@@ -50,6 +50,9 @@ describe('BookmarksPage', () => {
     const filter = screen.getByRole('combobox', { name: 'Show' });
     fireEvent.mouseDown(filter);
     expect(await screen.findByRole('option', { name: 'Later collection' })).toBeInTheDocument();
+    fireEvent.input(filter, { target: { value: 'Later' } });
+    expect(screen.getByRole('option', { name: 'Later collection' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Reading' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'Later collection' }));
     await waitFor(() => expect(api.request).toHaveBeenCalledWith('/bookmarks?page=1&pageSize=20&collectionId=collection-101'));
   });
