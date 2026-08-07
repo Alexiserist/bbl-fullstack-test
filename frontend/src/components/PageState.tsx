@@ -1,6 +1,6 @@
 import { Alert, CircularProgress, Stack, Typography } from '@mui/material';
 
-export function LoadingState({ label = 'Loading…' }: { label?: string }) {
+export function LoadingState({ label = 'Loading...' }: { label?: string }) {
   return (
     <Stack spacing={1} sx={{ alignItems: 'center', py: 8 }}>
       <CircularProgress size={28} />

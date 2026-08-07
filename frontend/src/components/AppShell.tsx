@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { AppBar, Avatar, Box, Button, Chip, Container, Stack, Toolbar, Typography } from '@mui/material';
-import { Link as RouterLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import type { Profile } from '../api/types';
 import { useApiRequest } from '../api/client';
 import { authConfig } from '../auth/config';
@@ -27,22 +27,29 @@ export function AppShell() {
 
   const displayName = profile?.name || profile?.email || user?.name || user?.email || 'Signed in';
   const avatarLetter = displayName.charAt(0).toUpperCase();
-
-  const signOut = () => {
-    void logout({ logoutParams: { returnTo: authConfig.logoutUrl } });
-  };
+  const signOut = () => void logout({ logoutParams: { returnTo: authConfig.logoutUrl } });
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>
       <AppBar position="sticky">
-        <Toolbar sx={{ gap: 2 }}>
+        <Toolbar sx={{ flexWrap: 'wrap', gap: 1 }}>
           <Typography color="inherit" sx={{ fontWeight: 700, mr: 1 }}>
             <RouterLink style={{ color: 'inherit', textDecoration: 'none' }} to="/collections">Private Bookmarks</RouterLink>
           </Typography>
-          <Button color="inherit" component={RouterLink} to="/collections">
+          <Button
+            color="inherit"
+            component={NavLink}
+            sx={{ '&.active': { bgcolor: 'rgba(255,255,255,.16)' } }}
+            to="/collections"
+          >
             Collections
           </Button>
-          <Button color="inherit" component={RouterLink} to="/bookmarks">
+          <Button
+            color="inherit"
+            component={NavLink}
+            sx={{ '&.active': { bgcolor: 'rgba(255,255,255,.16)' } }}
+            to="/bookmarks"
+          >
             Bookmarks
           </Button>
           <Box sx={{ flex: 1 }} />
@@ -76,7 +83,7 @@ export function LoginPage() {
 export function AuthLoadingPage() {
   return (
     <Box sx={{ alignItems: 'center', display: 'flex', justifyContent: 'center', minHeight: '100vh' }}>
-      <Typography color="text.secondary">Checking your session…</Typography>
+      <Typography color="text.secondary">Checking your session...</Typography>
     </Box>
   );
 }
