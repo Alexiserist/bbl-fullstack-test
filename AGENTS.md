@@ -228,7 +228,9 @@ At minimum, the verification plan must cover:
 
 Mocking part of authentication in tests is allowed only when it is disclosed and the application's real token-validation path is still exercised. Keep verification reproducible and document how to run it.
 
-- `TODO`: Choose the test frameworks, test layers, and any coverage thresholds. The assignment does not prescribe them.
+- Frontend automated tests use Vitest.
+- Backend automated tests use Jest with Nest testing utilities (`@nestjs/testing`).
+- `TODO`: Choose the test layers, backend HTTP integration tool, frontend component/browser helpers, test-database and seed lifecycle, end-to-end tooling, and any coverage thresholds. The assignment does not prescribe them.
 - CI/CD is optional, not a required test deliverable.
 
 ## When a requirement is unclear

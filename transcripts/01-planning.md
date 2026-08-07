@@ -1105,3 +1105,80 @@ I’ll append the visible planning conversation since the last transcript entry,
 ### Assistant
 
 Updated `transcripts/01-planning.md` through Topic 14. It now records the database, Auth0 identity, `/me`, token-validation, resource-validation, deletion, sharing, PUT/PATCH, privacy-error, response-envelope, filtering, pagination, nested-route, and test/seed discussions. Compacted assistant text is labeled as a retained decision summary rather than presented as verbatim. Credentials and hidden/tool-only content remain excluded. No application code was added.
+
+---
+
+## Turn 28 - Continue implementation
+
+### User
+
+continue
+
+### Assistant (work update)
+
+The repository is at a backend-only checkpoint with passing basic unit tests,
+an unfinished frontend, and documented TODOs for the remaining choices. I’m
+continuing from that state by applying the owner-scope review capability,
+checking the supplied Auth0 discovery and JWKS metadata, and then completing
+the required core slices in order.
+
+### Assistant (decision summary)
+
+The live discovery metadata confirmed the supplied issuer, authorization,
+token, userinfo, and JWKS endpoints; Authorization Code and `S256` are
+advertised, and the current published JWKS keys use RSA `RS256`. No real
+audience-bound access token was present, so the `azp` versus `client_id` claim
+remains a configuration TODO and no token value was copied into the repository.
+
+The remaining choices were recorded before implementation: a 1500 ms
+`/userinfo` timeout, `@auth0/auth0-react` for browser OIDC, Vitest plus
+Testing Library for the frontend, Jest/Nest/Supertest for backend HTTP tests,
+an opt-in PostgreSQL integration test lifecycle, and no optional bonus work.
+The configured npm registry had no React Router 8 release, so the latest
+available 7.18.2 package is used and the discrepancy is documented rather
+than claiming an unavailable version.
+
+### Assistant (implementation and recovery summary)
+
+The backend was hardened with finite time-claim checks, safe validation-error
+details, trimmed collection filters, migration SQL, and tests for real `jose`
+verification, JWKS refresh, invalid credentials, profile provisioning,
+uniform privacy errors, response envelopes, owner-scoped relations, and the
+optional SQL persistence path. A Nest HTTP test initially exposed incomplete
+installed framework/validation package files; normal package reinstalls
+repaired them, and the full default backend suite passed.
+
+The Vite frontend was added with Auth0 PKCE configuration, MUI pages for
+collections and bookmarks, detail routes, pagination, filtering, create and
+delete flows, the `/me` display fallback, and an authenticated API client that
+only sends the API access token. Vitest tests cover the API client and
+collection creation flow. Vite’s test cache initially targeted a read-only
+`node_modules` path, so the cache/config loading was redirected without
+changing product behavior. Frontend typecheck, tests, and production build
+then passed.
+
+No credentials, raw bearer tokens, or internal instructions were recorded in
+this transcript.
+
+---
+
+## Turn 29 - Correct the Auth0 callback and logout configuration
+
+### User
+
+why there was no callback on frontend there should use call back url
+`http://localhost:3000/callback`, Logout URL `http://localhost:3000`, and
+scope `openid profile email`
+
+### Assistant (debug and correction summary)
+
+The committed frontend configuration was traced and the mismatch was
+reproduced statically: the scope was already `openid profile email`, but the
+callback and logout examples/defaults incorrectly pointed at port 5173 and
+`/collections`. The redirect callback also used a raw history replacement
+instead of React Router navigation, and Vite did not default to port 3000.
+
+The frontend was corrected to use callback URL
+`http://localhost:3000/callback`, logout URL `http://localhost:3000`, Vite
+port 3000, and a router-aware Auth0 redirect callback. README and ADR-018 now
+record the exact Auth0 settings. No credentials were added.

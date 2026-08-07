@@ -1,6 +1,8 @@
 # API Design
 
-Status: Draft contract. No application code has been implemented.
+Status: Core backend and frontend implementation are being completed against
+this contract. Live Auth0 sign-in and PostgreSQL integration remain environment
+dependent and are only claimed when their runnable checks pass.
 
 ## Security invariants
 
@@ -53,7 +55,14 @@ JWKS keys are cached according to the endpoint's cache behavior. An unknown `kid
 
 Every validation failure and every ID token presented as an API credential receives a generic `401 Unauthorized`. Raw tokens must never be logged.
 
-`TODO`: Before implementing authentication, inspect a real audience-bound access token to confirm that its header uses `RS256` and whether its client claim is `azp` or `client_id`.
+The tenant discovery document and JWKS were inspected on 2026-08-07. Discovery
+advertises `authorization_code`, `S256`, and the configured issuer, userinfo,
+token, and JWKS endpoints; the published signing keys are RSA `RS256` keys.
+The repository does not contain a real audience-bound access token, so the
+exact client claim remains an explicit `TODO`: configure `AUTH0_CLIENT_CLAIM`
+to the observed `azp` or `client_id` value after obtaining one from the
+assignment tenant. The backend defaults to `azp` and never accepts a token
+without the configured matching client claim.
 
 ## Current user
 
@@ -79,7 +88,9 @@ Successful response fields:
 
 The frontend displays `name`, falling back to `email`, then to a generic signed-in label. Tokens, `authIssuer`, and `authSubject` are not returned.
 
-`TODO`: Choose and document the exact `/userinfo` timeout duration.
+The exact `/userinfo` timeout is 1500 ms. A timeout, non-success response,
+network failure, malformed body, or unavailable optional profile values leaves
+the nullable fields empty and does not reject the authenticated request.
 
 ## Collections
 
@@ -248,7 +259,10 @@ Both methods apply common validation, query the target by its ID and authenticat
 - The server performs the same-owner collection lookup before creating or updating a bookmark relation.
 - Database constraints mirror required scalar and relation guarantees where PostgreSQL and Prisma support them.
 
-The exact validation-error status and shared error response shape remain `TODO`.
+Validation failures use `400 Bad Request` with the `VALIDATION_ERROR` code,
+the `Request validation failed` message, and an array of non-sensitive details.
+The shared success and error envelopes are defined in the Response contract
+below.
 
 ## Owner changes and future administration
 

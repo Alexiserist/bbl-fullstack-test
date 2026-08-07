@@ -15,7 +15,7 @@ The live tenant discovery document advertises Authorization Code flow, PKCE with
 
 The backend will accept only an Auth0 access token requested for audience `https://bbl-candidate-test-api` in the HTTP `Authorization: Bearer <token>` header. It will not accept an ID token as API authorization.
 
-Before authorizing a request, the backend validates the token using the policy in ADR-006. A real audience-bound access token must still confirm `RS256` and whether the client claim is `azp` or `client_id` before authentication is implemented.
+Before authorizing a request, the backend validates the token using the policy in ADR-006. The tenant's current JWKS confirms `RS256`; a real audience-bound access token is still needed to confirm whether this tenant's client claim is `azp` or `client_id` for final environment configuration.
 
 ### Rationale
 
@@ -199,7 +199,10 @@ Reject unknown request properties and client-supplied `id`, `ownerId`, `createdA
 
 Allow duplicate collection names and duplicate bookmark URLs. Mirror required scalar and relation guarantees with database constraints where PostgreSQL and Prisma support them.
 
-Required-versus-optional field presence for `PUT` and `PATCH` is defined in ADR-010. Validation error status and shape remain `TODO`.
+Required-versus-optional field presence for `PUT` and `PATCH` is defined in
+ADR-010. Validation failures use the `400 VALIDATION_ERROR` envelope defined
+in ADR-012; details may identify fields and constraints but never echo
+rejected values.
 
 ### Rationale
 
@@ -446,3 +449,174 @@ The route directly satisfies the assignment and gives the collection page a clea
 - The route cannot represent uncategorized bookmarks because it requires an existing parent collection.
 - Clients cannot mutate bookmarks through the nested path.
 - Tests must cover parent validation and privacy, empty and populated pages, filter-route equivalence, unsupported parameters, and post-deletion behavior.
+
+## ADR-016: Use Vitest for frontend tests and Jest for backend tests
+
+- Status: Accepted, with remaining test design pending
+- Date: 2026-08-06
+
+### Context
+
+The assignment requires automated tests but does not prescribe test frameworks. The React/Vite frontend and NestJS backend need test runners that fit their respective toolchains, while the test layers, supporting libraries, database lifecycle, end-to-end approach, and coverage policy have not yet been selected.
+
+### Decision
+
+Use Vitest as the frontend test runner. Use Jest with Nest testing utilities (`@nestjs/testing`) as the backend test runner. The remaining test architecture is selected in ADR-019.
+
+### Rationale
+
+Vitest integrates naturally with the Vite-based frontend, while Jest and Nest's testing utilities provide the conventional Nest application and dependency-injection test harness. Selecting one runner per service avoids overlapping test-runner configuration.
+
+### Consequences and trade-offs
+
+- Frontend and backend tests use different runner APIs and configuration files.
+- Shared test concepts should not depend on runner-specific globals where avoidable.
+- This decision alone does not prove the required authentication, privacy, persistence, frontend, or end-to-end behavior; the remaining test design must define those layers.
+
+## ADR-017: Bound initial `/userinfo` enrichment to 1500 milliseconds
+
+- Status: Accepted
+- Date: 2026-08-07
+
+### Context
+
+Initial local-user provisioning may enrich nullable display fields from Auth0
+`/userinfo`, but a profile service must not hold an authenticated API request
+open indefinitely. The assignment requires one short timeout and says that a
+timeout or profile failure must not reject the authenticated request.
+
+### Decision
+
+Use a 1500 ms `AbortController` timeout for the one `/userinfo` request made
+when a verified Auth0 subject is first provisioned. A non-2xx response, timeout,
+network failure, malformed JSON, or unavailable profile values leaves the
+nullable `email` and `name` fields empty and the request continues. Existing
+local users do not call `/userinfo` again.
+
+### Rationale and trade-offs
+
+1500 ms is short enough to bound login-path latency while allowing a normal
+same-region profile request. It can omit optional profile data during transient
+latency, which is acceptable because profile values are display-only and the
+verified `(iss, sub)` identity remains authoritative.
+
+## ADR-018: Use Auth0 React SDK for the browser OIDC client
+
+- Status: Accepted
+- Date: 2026-08-07
+
+### Context
+
+The frontend needs Authorization Code flow with PKCE (`S256`), the supplied
+Auth0 tenant, the assignment client ID, callback URL
+`http://localhost:3000/callback`, logout URL `http://localhost:3000`, the API
+audience, and `openid profile email` scopes. The assignment leaves the React
+OIDC library open.
+
+### Decision
+
+Use `@auth0/auth0-react`. Its provider owns the browser authorization-code/
+PKCE redirect state, token cache, login, logout, and access-token retrieval.
+The API client requests a token for the configured API audience and calls only
+the backend with that access token; it never sends an ID token as API
+authorization. Configuration is supplied through Vite environment variables,
+not source-controlled credentials.
+
+The latest published `react-router-dom` package available in the configured
+npm registry during implementation is 7.18.2; no 8.x release or prerelease is
+published there. The frontend therefore uses that latest available major and
+records the assignment's 8-or-newer router requirement as an external
+dependency TODO rather than inventing an unpublished package version.
+MUI is pinned to the available 9.x line.
+
+### Trade-offs
+
+The Auth0 SDK reduces protocol and token-cache code in the browser, but it is a
+runtime dependency and still requires a real tenant configuration for an
+end-to-end sign-in. The router version discrepancy is documented honestly and
+must be revisited if the assignment environment provides React Router 8.
+
+### Evidence
+
+- [Auth0 React SDK](https://dev.auth0.com/docs/libraries/auth0-react) — documents Authorization Code with PKCE and audience/scope access-token retrieval.
+- [Auth0 PKCE authorize endpoint](https://auth0.com/docs/api/authentication/authorization-code-flow-with-pkce/authorize-with-pkce) — documents `code`, `S256`, and API audience usage.
+
+## ADR-019: Select the verification layers and lifecycle
+
+- Status: Accepted
+- Date: 2026-08-07
+
+### Decision
+
+Use these runnable layers:
+
+1. Backend Jest unit tests for DTO rules, pagination, response/error mapping,
+   JWT validation, user provisioning, owner-scoped service branches, and
+   atomic deletion calls.
+2. Backend Nest testing utilities plus Supertest for HTTP contract tests. The
+   application uses a controlled Prisma test double for fast contract/privacy
+   cases, while dedicated AuthService tests exercise the real `jose` validation
+   path with generated RSA keys and a controlled JWKS server. This split and
+   the test doubles are disclosed in the test files and README.
+3. PostgreSQL integration tests are run against the Docker Compose database
+   after `prisma migrate reset` and `prisma db seed`; they are opt-in when
+   `DATABASE_URL` and a reachable database are present so the default unit
+   suite remains reproducible without Docker.
+4. Frontend Vitest tests use jsdom and React Testing Library for authenticated
+   loading, collection/bookmark CRUD actions, filtering, and fallback profile
+   labels. Browser-level Auth0 E2E is an environment-only smoke test and is not
+   required for the default test command because it needs supplied credentials.
+
+No arbitrary global coverage percentage is claimed. The required endpoint,
+authentication, privacy, validation, pagination, and frontend operation matrix
+is the acceptance threshold, with coverage reports available through the
+backend and frontend test commands.
+
+### Rationale and trade-offs
+
+The split keeps local verification fast while still exercising the real token
+validator and providing a documented SQL lifecycle for persistence tests. It
+does not claim live Auth0 sign-in in an environment that lacks the tenant client
+configuration or test credentials.
+
+## ADR-020: Defer optional bonus work
+
+- Status: Accepted
+- Date: 2026-08-07
+
+The optional Dockerfile, CI/CD pipeline, `/all` page, full-text search, and
+sharing are not attempted in the current submission. The required private
+bookmark and collection flow takes priority, and no bonus behavior is added to
+the API contract.
+
+## ADR-021: Handle expired or rejected API sessions in the frontend
+
+- Status: Accepted
+- Date: 2026-08-07
+
+### Context
+
+The backend correctly returns the generic `401 UNAUTHORIZED` envelope when an
+access token is missing, expired, invalid, or fails the Auth0 validation rules.
+Previously, the frontend displayed the request error but left the Auth0
+session state unchanged, so the user could remain on an authenticated page
+after the API rejected the token.
+
+### Decision
+
+When `apiRequest` receives HTTP 401, `useApiRequest` invokes Auth0 logout once
+for the mounted request hook and returns to `http://localhost:3000`. The
+application then observes `isAuthenticated === false` and renders the normal
+sign-in page. The backend remains strict; the frontend does not retry with an
+ID token or suppress the API error.
+
+Backend Auth0 configuration is kept separate from frontend Vite configuration
+and must be present in the backend runtime environment. `backend/.env.example`
+is the source template; `frontend/.env` is never loaded by NestJS.
+
+### Evidence
+
+- `frontend/src/api/client.auth.spec.tsx` verifies one logout call and the
+  configured local return URL after a 401.
+- A controlled backend repro confirms an empty `AUTH0_CLIENT_ID` produces
+  `UnauthorizedException:401` before token verification.
