@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+Full-Stack-Developer-Test.pdf
 **/node_modules/
 **/dist/
 **/coverage/

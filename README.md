@@ -10,7 +10,22 @@ for the assignment constraints.
 
 ## Local PostgreSQL
 
-The local database uses PostgreSQL 18.4 through Docker Compose. Copy `.env.example` to `.env` if `.env` is not already present, then review the local-only credentials.
+The local database uses PostgreSQL 18.4 through Docker Compose. From the
+repository root, create local configuration from the committed sanitized
+templates:
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
+```
+
+Review all three local files before running the application. Keep the root
+`POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` values aligned with the
+credentials embedded in `backend/.env`'s `DATABASE_URL`. Replace the backend
+and frontend Auth0 client-ID placeholders with the supplied public client ID.
+Never put the supplied test-user password, a bearer token, or a client secret
+in any repository environment file.
 
 Start the database:
 
@@ -30,34 +45,21 @@ Stop the database:
 docker compose down
 ```
 
-Prisma uses `DATABASE_URL` from `.env`. From the repository root, copy the
-example first if needed:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Then initialize and seed the backend database (the commands below run with the
-backend package as the working directory):
+Prisma uses `DATABASE_URL` from `backend/.env`. Initialize and seed the backend
+database from the backend package directory:
 
 ```powershell
 Set-Location backend
-if (!(Test-Path .env)) { Copy-Item .env.example .env }
 npm.cmd install
 npm.cmd run prisma:generate
 npm.cmd run prisma:migrate:deploy
 npm.cmd run prisma:seed
 ```
 
-The Prisma CLI reads `DATABASE_URL` from the backend working directory. If the
-repository `.env` is not also available there, set `DATABASE_URL` in the shell
-before running Prisma commands. The backend also reads its Auth0 settings from
-this same `backend/.env` file. `frontend/.env` is not loaded by the backend; an
-existing backend environment containing only database settings causes every
-authenticated API request to return `401 Unauthorized` because
-`AUTH0_CLIENT_ID` is missing. Merge the Auth0 settings from
-`backend/.env.example` into an existing local file and do not commit
-credentials.
+The backend reads both Prisma and Auth0 settings from `backend/.env`.
+`frontend/.env` is not loaded by NestJS. A missing `AUTH0_CLIENT_ID` causes
+authenticated API requests to return `401 Unauthorized`; do not weaken token
+validation to compensate for incomplete local configuration.
 
 Run the backend:
 
@@ -82,12 +84,11 @@ tests, generic privacy errors, pagination, and owner-scoped service behavior.
 The HTTP and token tests use controlled test doubles; PostgreSQL persistence
 verification requires the Docker Compose database.
 
-The frontend uses the separate package:
+Run the frontend from its separate package directory. Its `.env` must already
+have been copied from `frontend/.env.example` as shown above:
 
 ```powershell
 Set-Location ..\frontend
-Copy-Item .env.example .env
-# Set VITE_AUTH0_CLIENT_ID to the supplied client ID in frontend/.env.
 npm.cmd install
 npm.cmd run dev
 ```
